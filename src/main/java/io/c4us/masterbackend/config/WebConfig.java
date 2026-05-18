@@ -24,9 +24,15 @@ public class WebConfig implements WebMvcConfigurer {
      * 🔹 Configuration pour servir les fichiers uploadés depuis le dossier local
      * "uploads/"
      */
+
+    
+
     @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/uploads/**")
-                .addResourceLocations(System.getProperty("user.home") + "/Downloads/Uploads/"); // dossier local
-    }
+public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    String path = "file:" + System.getProperty("user.home") + "/Downloads/Uploads/";
+    registry.addResourceHandler("/uploads/**")
+            .addResourceLocations(path);
+
+            
+}
 }

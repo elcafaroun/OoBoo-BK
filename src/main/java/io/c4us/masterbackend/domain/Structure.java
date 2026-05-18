@@ -9,6 +9,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,12 +20,14 @@ import lombok.Setter;
 @AllArgsConstructor
 @Getter
 @Setter
-@Table(name="structures")
+@Table(name = "structures")
 public class Structure implements Serializable {
-   @Id
+
+    @Id
     @UuidGenerator
     @Column(name = "id", unique = true, updatable = false)
     private String idStructure;
+
     private String nomStructure;
     private String phone1Structure;
     private String phone2Structure;
@@ -37,11 +40,33 @@ public class Structure implements Serializable {
     private String typeStructure;
     private String disponibiliteStructure;
     private String geoLocStructure;
-    private boolean isActive =true;
-    private LocalDateTime createdDate = LocalDateTime.now(); 
     private String descriptionStructure;
     private String createdUserId;
     private String codeStructure;
     private String planStructure;
+    private LocalDateTime startSub;
+    private LocalDateTime endSub;
+
+    private boolean isActive = true;
+
+    private double cout;
+
+    private Long priorite;
+
+       @Version
+    private Long version; //
+
+    // --- AJOUTS POUR LE MODE OFFLINE ---
+
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdDate = LocalDateTime.now();
+
+    // Permet de savoir quand synchroniser
+    private LocalDateTime lastUpdated = LocalDateTime.now();
+
+    // Permet de synchroniser la suppression vers le mobile
+    private boolean deleted = false;
+
+    // Pour gérer les conflits de modification concurrentielle
     
 }

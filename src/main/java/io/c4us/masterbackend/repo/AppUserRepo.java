@@ -1,5 +1,6 @@
 package io.c4us.masterbackend.repo;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,5 +15,9 @@ public interface AppUserRepo extends JpaRepository<AppUser, String> {
     AppUser findByUserEmail(String confirmationToken);
 
     AppUser findByUserPhone(String phone); // 👈 ajoute cette ligne
+
+    List<AppUser> findByCodeStructureAndIsActiveTrue(String codeStructure);
+    
+    List<AppUser> findByCodeStructure(String codeStructure);
 
 }

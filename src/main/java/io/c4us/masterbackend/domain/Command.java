@@ -1,42 +1,54 @@
 package io.c4us.masterbackend.domain;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Entity;
-
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
+import org.springframework.data.domain.Persistable;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import jakarta.persistence.*;
 import lombok.Data;
-
 
 @Entity
 @Data
-public class Command {
+@Table(name = "commands")
+public class Command implements Serializable, Persistable<String> {
 
-   @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Id
+    private String id; // L'ID généré par Flutter (ex: CMD-123456)
+    
     private String customerName;
     private String status = "PENDING";
-    private LocalDateTime orderDate = LocalDateTime.now();
-    private double totalAmount; // Calculé par le service
+    private Double totalAmount;
+    private Double totalCredit = 0.0;
     private String codeStructure;
+    private String paymentMethod;
+    
+    private LocalDateTime orderDate = LocalDateTime.now();
+    private LocalDateTime lastUpdated = LocalDateTime.now();
+    private boolean deleted = false;
 
+    @Version
+    private Long version = 0L; // Initialisé à 0 pour forcer l'INSERT
 
-    // Une commande a plusieurs lignes de commande (items)
-    // CascadeType.ALL: Si l'Order est supprimée, les OrderItems associés le sont aussi.
     @OneToMany(mappedBy = "command", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
     private List<CommandLine> items = new ArrayList<>();
 
-    // Méthode utilitaire pour synchroniser la relation bidirectionnelle
+    // --- Logique Persistable pour les IDs manuels ---
+    @Override
+    public String getId() {
+        return id;
+    }
+
+    @Override
+    @Transient // Ne pas stocker ce booléen en base
+    public boolean isNew() {
+        return version == null || version == 0L;
+    }
+
     public void addLigneCommande(CommandLine ligneCommande) {
         items.add(ligneCommande);
         ligneCommande.setCommand(this);
-
-}
+    }
 }

@@ -1,6 +1,8 @@
 package io.c4us.masterbackend.ressource;
 
 import java.net.URI;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -9,8 +11,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,18 +32,17 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/user")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:5173")
-public class AppUserRessource { 
+public class AppUserRessource {
 
     @Autowired
-    private final AppUserService appUserService;
+    private  AppUserService appUserService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
     @Autowired
     private EmailService emailService;
 
-      @Autowired
+    @Autowired
     private AppUserRepo appUserRepo;
 
     @PostMapping
@@ -58,21 +63,11 @@ public class AppUserRessource {
         Optional<AppUser> userOpt = appUserService.findByConfirmationToken(confirmationToken);
 
         if (userOpt.isEmpty()) {
-            // headers.add("Location", "http://votre-frontend-domain.com/login");
-            // return new ResponseEntity<>("Token de confirmation invalide ou expiré.",
-            // HttpStatus.BAD_REQUEST);
+
             URI redirectUri = URI.create("http://localhost:5173/confirmation-error");
             return ResponseEntity.status(HttpStatus.FOUND).location(redirectUri).build();
 
         }
-
-        /*
-         * if (structureOpt.getTokenExpiryDate().isBefore(LocalDateTime.now())) {
-         * // Le token est expiré. Optionnel: on peut nettoyer le token expiré ici
-         * return new ResponseEntity<>("Token de confirmation invalide ou expiré.",
-         * HttpStatus.BAD_REQUEST);
-         * }
-         */
 
         AppUser appUser = userOpt.get();
 
@@ -80,11 +75,6 @@ public class AppUserRessource {
         appUser.setActive(true);
         appUser.setConfirmationToken(null); // Optionnel: Invalider le token après usage
         appUserService.updateAppUser(appUser);
-
-        // 3. Rediriger ou retourner un message de succès
-        // headers.add("Location", "http://localhost:5173/login");
-        // return new ResponseEntity<>("Votre structure a été activée avec succès!",
-        // HttpStatus.OK);
 
         URI redirectUri = URI.create("http://localhost:5173/login?confirmed=true");
         return ResponseEntity.status(HttpStatus.FOUND).location(redirectUri).build();
@@ -105,38 +95,80 @@ public class AppUserRessource {
         }
     }
 
-@PostMapping("/login")
-public ResponseEntity<?> loginUser(@RequestBody LoginRequest request) {
-    String identifier = request.getIdentifier();
-    String password = request.getPassword();
+    @PostMapping("/login")
+    public ResponseEntity<?> loginUser(@RequestBody LoginRequest request) {
+        String identifier = request.getIdentifier();
+        String password = request.getPassword();
 
-    // Rechercher l’utilisateur soit par email, soit par téléphone
-    AppUser user = appUserRepo.findByUserEmail(identifier);
-    if (user == null) {
-        user = appUserRepo.findByUserPhone(identifier);
+        // 1. Rechercher l’utilisateur (Email ou Téléphone)
+        AppUser user = appUserRepo.findByUserEmail(identifier);
+        if (user == null) {
+            user = appUserRepo.findByUserPhone(identifier);
+        }
+
+        // 2. Vérification existence et mot de passe
+        if (user == null || !passwordEncoder.matches(password, user.getUserPassword())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Identifiants incorrects");
+        }
+
+        // 3. Vérification de l’activation du compte
+        if (!user.isActive()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Veuillez confirmer votre compte avant de vous connecter.");
+        }
+
+        // ✅ 4. Connexion réussie : Utilisation de HashMap pour éviter le
+        // NullPointerException
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Connexion réussie");
+        response.put("id", user.getId());
+        response.put("userName", user.getUserName());
+        response.put("userPhone", user.getUserPhone());
+        response.put("userProfile", user.getUserProfile()); // Indispensable pour Flutter
+        response.put("codeStructure", user.getCodeStructure());
+        // On peut mettre l'email même s'il est null, HashMap l'acceptera
+        response.put("userEmail", user.getUserEmail());
+
+        return ResponseEntity.ok(response);
     }
 
-    // Vérification existence et mot de passe
-    if (user == null || !passwordEncoder.matches(password, user.getUserPassword())) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body("Email/téléphone ou mot de passe incorrect"+identifier+"OK");
-                
-    }
-    // Vérification de l’activation du compte
-    if (!user.isActive()) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("Veuillez confirmer votre compte avant de vous connecter.");
+    @GetMapping("/structure/{codeStructure}")
+    public ResponseEntity<List<AppUser>> getUsersByStructure(@PathVariable String codeStructure) {
+        return ResponseEntity.ok(appUserService.getAllUsersByStructure(codeStructure));
     }
 
-    // Connexion réussie
-    return ResponseEntity.ok(Map.of(
-            "message", "Connexion réussie",
-            "userName", user.getUserName(),
-            "userEmail", user.getUserEmail(),
-            "userPhone", user.getUserPhone(),
-            "id", user.getId()
-    ));
-}
+    // 2. Modifier un utilisateur
+    @PutMapping("/update/{id}")
+    public ResponseEntity<AppUser> updateAppUser(@PathVariable String id, @RequestBody AppUser user) {
+        return ResponseEntity.ok(appUserService.updateUser(id, user));
+    }
 
+    // 3. Désactiver un utilisateur (Recommandé à la place de supprimer)
+    @PatchMapping("/disable/{id}")
+    public ResponseEntity<Void> disableAppUser(@PathVariable String id) {
+        appUserService.disableUser(id);
+        return ResponseEntity.noContent().build();
+    }
 
+    // 4. Supprimer un utilisateur
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<Void> deleteAppUser(@PathVariable String id) {
+        appUserService.deleteUser(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/enable/{id}")
+    public ResponseEntity<Void> enableAppUser(@PathVariable String id) {
+        AppUser user = appUserService.getAppUser(id);
+        user.setActive(true);
+        appUserRepo.save(user);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/reset-password/{id}")
+    public ResponseEntity<Void> resetPassword(@PathVariable String id, @RequestBody Map<String, String> request) {
+        appUserService.changePassword(id, request.get("newPassword"));
+        return ResponseEntity.ok().build();
+    }
 }

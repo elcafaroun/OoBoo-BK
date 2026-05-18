@@ -57,5 +57,8 @@ public class CustomerService {
     //private Passwor passwordEncoder; 
         return customerRepo.save(customer);
     }
+
+
+    
     
 }

@@ -6,18 +6,13 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.c4us.masterbackend.domain.Structure;
@@ -27,7 +22,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/structure")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:5173")
+// @CrossOrigin(origins = "http://localhost:5173")
 public class StructureRessource {
 
     private final StructureService structureService;
@@ -35,21 +30,34 @@ public class StructureRessource {
     @PostMapping
     public ResponseEntity<Structure> createStructure(@RequestBody Structure struct) {
         try {
-            return ResponseEntity.created(URI.create("/structure/userID"))
-                    .body(structureService.createStructure(struct));
-
+            // Utilisation de l'ID de l'objet créé pour l'URI
+            Structure created = structureService.createStructure(struct);
+            return ResponseEntity.created(URI.create("/structure/" + created.getIdStructure()))
+                    .body(created);
         } catch (Exception e) {
-            e.printStackTrace();
             return ResponseEntity.badRequest().build();
         }
     }
 
-    @GetMapping(path = "/image/{filename}", produces = { org.springframework.http.MediaType.IMAGE_PNG_VALUE,
-            org.springframework.http.MediaType.IMAGE_JPEG_VALUE })
+    /**
+     * ENDPOINT DE SYNCHRONISATION (Crucial pour le mode Offline)
+     * Flutter appellera : /structure/sync/user123?lastSync=2026-03-13T10:00:00
+     */
+    @GetMapping("/sync/{userId}")
+    public ResponseEntity<List<Structure>> syncStructures(
+            @PathVariable String userId,
+            @RequestParam(value = "lastSync", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime lastSync) {
+
+        return ResponseEntity.ok(structureService.getUpdatesForSync(userId, lastSync));
+    }
+
+    @GetMapping(path = "/image/{filename}", produces = {
+            MediaType.IMAGE_PNG_VALUE,
+            MediaType.IMAGE_JPEG_VALUE
+    })
     public byte[] getPhoto(@PathVariable("filename") String filename) throws IOException {
         return Files.readAllBytes(Paths.get(PHOTO_DIRECTORY + filename));
     }
-    // ... suite du StructureController
 
     @PutMapping("/photo")
     public ResponseEntity<String> uploadPhoto(@RequestParam("id") String id, @RequestParam("file") MultipartFile file) {
@@ -58,6 +66,7 @@ public class StructureRessource {
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<Structure>> getByUser(@PathVariable String userId) {
+        // Retourne uniquement les structures actives pour l'affichage standard
         return ResponseEntity.ok(structureService.getStructuresByUser(userId));
     }
 
@@ -66,5 +75,37 @@ public class StructureRessource {
         return ResponseEntity.ok(structureService.getAllStructure());
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Structure> delStructure(@PathVariable(value = "id") String id) {
+        // Le service effectue maintenant un Soft Delete
+        return ResponseEntity.ok().body(structureService.delStructure(id));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Structure> getStructureById(@PathVariable String id) {
+        return ResponseEntity.ok(structureService.getStructure(id));
+    }
+
+    /**
+     * Permet de renouveler ou changer le plan d'une structure.
+     * Appelée par l'application Flutter lors du renouvellement.
+     */
+    @PutMapping("/update-plan")
+    public ResponseEntity<Structure> updateStructurePlan(
+            @RequestParam String id,
+            @RequestParam String plan) {
+        try {
+            return ResponseEntity.ok(structureService.updateStructurePlan(id, plan));
+        } catch (Exception e) {
+            // Retourne 400 si le plan n'existe pas ou si l'id est invalide
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("/exists")
+    public ResponseEntity<Boolean> checkName(@RequestParam String nom) {
+        boolean exists = structureService.checkIfNameExists(nom);
+        return ResponseEntity.ok(exists);
+    }
 
 }

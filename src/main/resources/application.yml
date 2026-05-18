@@ -1,44 +1,74 @@
 spring:
+  # Configuration Mail (Syntaxe unifiée et robuste)
   mail:
     host: smtp.gmail.com
     port: 587
     username: bayala.m.olivier@gmail.com
-    password: jppm ygri yeke vyoh # ⚠️ mot de passe d’application Gmail
+    password: ppmygriyekevyoh
     properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.ssl.trust: smtp.gmail.com
     default-encoding: UTF-8
+
+  # Configuration Base de données
   datasource:
-    url: jdbc:postgresql://localhost/db-delaala
-    username: postgres
-    password: test
+    url: jdbc:postgresql://localhost:5432/mbep
+    username: marcolivierbayala
+    password: 
+
+  # Configuration JPA / Hibernate
   jpa:
-    database-platform: org.hibernate.dialect.PosgreSQLInnoDBDialect
-    generate-ddl: true
+    defer-datasource-initialization: true 
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: true
     hibernate:
       ddl-auto: update
     properties:
       hibernate:
-        globally_quoted_identifiers: true
+        globally_quoted_identifiers: false 
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+
+  # Initialisation SQL
+  sql:
+    init:
+      mode: always
+
+  # Configuration Upload et Web
   servlet:
     multipart:
       enabled: true
       max-file-size: 1000MB
       max-request-size: 1000MB
+
   mvc:
     async:
       request-timeout: 3600000
+
+# Configuration Serveur
 server:
-  address: 0.0.0.0   # Écoute sur toutes les interfaces réseau (pas seulement localhost)
-  port: 8080         # Port de ton application (tu peux le changer si besoin)
+  address: 0.0.0.0
+  port: 8080
+
+# Management Actuator
 management:
   endpoints:
     web:
       exposure:
-        include: "*" 
+        include: "*"
+  # 👇 AJOUT : Désactive la vérification automatique du Mail par l'Actuator
+  health:
+    mail:
+      enabled: false
+
+# Propriétés personnalisées
+app:
+  default-user:
+    name: Admin
+    email: admin@admin.com
+    phone: "76174849"
+    password: test
+    profile: administrateur
+    structure: DEFAULT

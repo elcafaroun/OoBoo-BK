@@ -1,36 +1,42 @@
 package io.c4us.masterbackend.domain;
 
+import java.io.Serializable;
+
+import org.hibernate.annotations.UuidGenerator;
+
+import com.fasterxml.jackson.annotation.JsonBackReference;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Data;
 
 @Entity
 @Data
-public class CommandLine {
+@Table(name = "command_lines")
+public class CommandLine implements Serializable {
 
-
-    
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @UuidGenerator
+    private String id;
 
-    private String productName; // Nom du produit commandé
-    private int quantity;        // Quantité
-    private double unitPrice;     // Prix unitaire
+    private String productId; // AJOUT : Indispensable pour mettre à jour le stock au retour d'internet
+    private String productName;
+    private int quantity;        
+    private double unitPrice;     
     private String codeStructure;
+     @Version
+    private Long version; //
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "command_id", nullable = false)
+    @JsonBackReference
+    private Command command;
 
-    
-    @ManyToOne(fetch = FetchType.LAZY) // Plusieurs lignes de commande peuvent appartenir à une seule commande
-    @JoinColumn(name = "order_id", nullable = false)
-    private Command command; // Référence à la commande parente
-
-    // Calcul du sous-total
     public double getSubTotal() {
         return quantity * unitPrice;
     }

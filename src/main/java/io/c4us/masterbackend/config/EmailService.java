@@ -9,6 +9,9 @@ import org.springframework.stereotype.Service;
 
 import io.c4us.masterbackend.domain.AppUser;
 import io.c4us.masterbackend.repo.AppUserRepo;
+import lombok.extern.slf4j.Slf4j; // 1. Importez ceci
+
+@Slf4j // 2. Ajoutez ceci
 
 @Service
 public class EmailService {
@@ -39,6 +42,34 @@ public class EmailService {
         // 3. Envoyer l'e-mail
         mailSender.send(message);
     }
+
+public void sendStockAlertEmail(String targetEmail, String productName, double currentQuantity, double alertThreshold) {
+    SimpleMailMessage message = new SimpleMailMessage();
+
+    // 1. Préparer le destinataire et l'objet
+    message.setTo(targetEmail);
+    message.setSubject("⚠️ ALERTE STOCK CRITIQUE : " + productName);
+
+    // 2. Préparer le contenu du message
+    String emailText = "ALERTE DE RUPTURE DE STOCK\n"
+            + "-----------------------------------\n"
+            + "Produit : " + productName + "\n"
+            + "Quantité actuelle : " + currentQuantity + "\n"
+            + "Seuil d'alerte défini : " + alertThreshold + "\n"
+            + "-----------------------------------\n"
+            + "Veuillez prévoir un réapprovisionnement immédiat pour éviter une rupture de stock.\n\n"
+            + "Ceci est un message automatique généré par MasterBackend.";
+
+    message.setText(emailText);
+
+    // 3. Envoyer l'e-mail
+    try {
+        mailSender.send(message);
+        log.info("📧 E-mail d'alerte stock envoyé pour le produit : {}", productName);
+    } catch (Exception e) {
+        log.error("❌ Erreur lors de l'envoi de l'e-mail d'alerte : {}", e.getMessage());
+    }
+}
 
     public boolean resendConfirmationEmail(String email) {
         AppUser user = appUserRepo.findByUserEmail(email);

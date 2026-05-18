@@ -1,15 +1,12 @@
 package io.c4us.masterbackend.domain;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 
-
-import org.hibernate.annotations.UuidGenerator;
-
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,11 +20,14 @@ import lombok.Setter;
 @Table(name = "customers")
 public class Customer implements Serializable {
     @Id
-    @UuidGenerator
-    @Column(name = "id", unique = true, updatable = false)
     private String id;
     private String numCust;
     private String codePin;
+    private String customerName;
+        private LocalDateTime createdDate = LocalDateTime.now();
+           @Version
+    private Long version; //
+
    // private boolean isActive= true;
 
 }
