@@ -38,25 +38,35 @@ public class StructureService {
 
     // Création
     public Structure createStructure(Structure struct) {
-        struct.setLastUpdated(LocalDateTime.now());
-        SubscriptionPlan plan = planRepository.findByName(struct.getPlanStructure())
-                .orElseThrow(
-                        () -> new RuntimeException("Plan de souscription introuvable : " + struct.getPlanStructure()));
+    struct.setLastUpdated(LocalDateTime.now());
+    
+    // 1. Récupération du plan de souscription
+    SubscriptionPlan plan = planRepository.findByName(struct.getPlanStructure())
+            .orElseThrow(() -> new RuntimeException("Plan de souscription introuvable : " + struct.getPlanStructure()));
 
-        // 2. Calculer les dates
-        LocalDateTime today = LocalDateTime.now();
-        Integer duration = plan.getNombreJourSouscription() != null ? plan.getNombreJourSouscription() : 0;
+    // 2. Calculer les dates et détails du plan
+    LocalDateTime today = LocalDateTime.now();
+    Integer duration = plan.getNombreJourSouscription() != null ? plan.getNombreJourSouscription() : 0;
+    double cout = plan.getCout() != null ? plan.getCout() : 0;
+    Long priorite = plan.getPriorite();
 
-        double cout = plan.getCout() != null ? plan.getCout() : 0;
-        Long priorite = plan.getPriorite();
+    // 3. Appliquer les informations financières et de calendrier
+    struct.setStartSub(today);
+    struct.setEndSub(today.plusDays(duration));
+    struct.setCout(cout);
+    struct.setPriorite(priorite);
 
-        // 3. Appliquer les dates à la structure
-        struct.setStartSub(today);
-        struct.setEndSub(today.plusDays(duration));
-        struct.setCout(cout);
-        struct.setPriorite(priorite);
-        return structureRepo.save(struct);
-    }
+    // 4. GÉNÉRATION AUTOMATIQUE ET UNIQUE DU CODE STRUCTURE (Format EXXX)
+    // On récupère le nombre actuel de structures et on ajoute 1
+    long nextSequence = structureRepo.count() + 1;
+    
+    // Le format "%03d" garantit un nombre sur 3 chiffres minimum avec des zéros (001, 002, 015, 125)
+    String generatedCode = String.format("E%03d", nextSequence);
+    struct.setCodeStructure(generatedCode);
+
+    // 5. Sauvegarde finale
+    return structureRepo.save(struct);
+}
 
     // Récupération pour affichage (exclut les supprimés)
     public List<Structure> getStructuresByUser(String userId) {

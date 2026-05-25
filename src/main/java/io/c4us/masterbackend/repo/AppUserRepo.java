@@ -17,7 +17,20 @@ public interface AppUserRepo extends JpaRepository<AppUser, String> {
     AppUser findByUserPhone(String phone); // 👈 ajoute cette ligne
 
     List<AppUser> findByCodeStructureAndIsActiveTrue(String codeStructure);
-    
+
     List<AppUser> findByCodeStructure(String codeStructure);
+
+    long countByCodeStructure(String codeStructure);
+
+    long countByCodeUserStartingWith(String prefix);
+
+    // Dans votre AppUserRepo.java
+    boolean existsByUserEmail(String email);
+
+    boolean existsByUserPhone(String phone);
+
+
+    
+    AppUser findByCodeUser(String code);
 
 }

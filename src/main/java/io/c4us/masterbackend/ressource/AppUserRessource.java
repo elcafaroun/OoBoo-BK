@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -104,6 +103,9 @@ public class AppUserRessource {
         AppUser user = appUserRepo.findByUserEmail(identifier);
         if (user == null) {
             user = appUserRepo.findByUserPhone(identifier);
+            if(user==null){
+             user = appUserRepo.findByCodeUser(identifier);
+            }
         }
 
         // 2. Vérification existence et mot de passe
@@ -170,5 +172,22 @@ public class AppUserRessource {
     public ResponseEntity<Void> resetPassword(@PathVariable String id, @RequestBody Map<String, String> request) {
         appUserService.changePassword(id, request.get("newPassword"));
         return ResponseEntity.ok().build();
+    }
+    @GetMapping("/check-email")
+    public ResponseEntity<Map<String, Boolean>> checkEmailAvailability(@RequestParam String email) {
+        boolean isUnique = appUserService.isEmailUnique(email);
+        // Renvoie un JSON propre {"available": true/false}
+        return ResponseEntity.ok(Map.of("available", isUnique));
+    }
+
+    /**
+     * 🔹 Endpoint : Vérifier la disponibilité d'un numéro de téléphone
+     * URL : GET /api/v1/users/check-phone?phone=70000000
+     */
+    @GetMapping("/check-phone")
+    public ResponseEntity<Map<String, Boolean>> checkPhoneAvailability(@RequestParam String phone) {
+        boolean isUnique = appUserService.isPhoneUnique(phone);
+        // Renvoie un JSON propre {"available": true/false}
+        return ResponseEntity.ok(Map.of("available", isUnique));
     }
 }

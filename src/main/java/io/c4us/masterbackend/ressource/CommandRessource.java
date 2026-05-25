@@ -16,7 +16,6 @@ import io.c4us.masterbackend.DTOs.SettleCreditDto;
 import io.c4us.masterbackend.domain.Command;
 import io.c4us.masterbackend.service.CommandService;
 import io.c4us.masterbackend.service.DepenseService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController

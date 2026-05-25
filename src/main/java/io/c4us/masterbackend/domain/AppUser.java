@@ -29,12 +29,12 @@ public class AppUser {
     private String userName;
     private String userEmail;
     private String userPhone;
-
     private LocalDateTime createdDate = LocalDateTime.now();
-
     // Ajout pour la synchronisation
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    private String codeUser;
 
     @Version
     private Long version; // Pour la gestion des conflits

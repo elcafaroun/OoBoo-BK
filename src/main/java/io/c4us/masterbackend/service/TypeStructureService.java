@@ -6,7 +6,6 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
-import io.c4us.masterbackend.domain.Structure;
 import io.c4us.masterbackend.domain.TypeStructure;
 import io.c4us.masterbackend.repo.TypeStructureRepo;
 import jakarta.transaction.Transactional;
