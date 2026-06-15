@@ -4,13 +4,18 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import io.c4us.masterbackend.DTOs.AppUserDTO;
 import io.c4us.masterbackend.domain.AppUser;
+import io.c4us.masterbackend.domain.Structure;
+import io.c4us.masterbackend.domain.UserStructure;
 import io.c4us.masterbackend.repo.AppUserRepo;
+import io.c4us.masterbackend.repo.StructureRepo;
+import io.c4us.masterbackend.repo.UserStructureRepo;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,13 +26,15 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class AppUserService {
 
-    @Autowired
-    private AppUserRepo appUserRepo;
+    private final AppUserRepo appUserRepo;
+    private final StructureRepo structureRepo;
+    private final UserStructureRepo userStructureRepo;
+    private final PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-   public AppUser createAppUser(AppUser user) {
+    /**
+     * Création d'un utilisateur et affectation à sa première structure
+     */
+    public AppUser createAppUser(AppUser user, String codeStructureCible, String roleInitial) {
         // 1. Double sécurité d'unicité
         if (!isEmailUnique(user.getUserEmail())) {
             throw new RuntimeException("L'adresse email '" + user.getUserEmail() + "' est déjà utilisée.");
@@ -36,71 +43,110 @@ public class AppUserService {
             throw new RuntimeException("Le numéro de téléphone '" + user.getUserPhone() + "' est déjà utilisé.");
         }
 
-        // 2. Détermination de la nature du profil
         boolean isSuperAdmin = "Super admin".equalsIgnoreCase(user.getUserProfile());
-        
-        // Extraction du code PIN / Mot de passe d'origine avant hachage
         String clearPassword = user.getUserPassword();
 
-        // 3. Chiffrement et Token
+        // 2. Chiffrement et Token
         user.setUserPassword(passwordEncoder.encode(user.getUserPassword()));
         user.setConfirmationToken(generateAndSetToken(user));
 
-        // Un compte enfant (non-Super admin) doit obligatoirement être rattaché à une structure existante
-        if (!isSuperAdmin && (user.getCodeStructure() == null || user.getCodeStructure().trim().isEmpty())) {
+        // Validation de la structure obligatoire pour les comptes enfants
+        if (!isSuperAdmin && (codeStructureCible == null || codeStructureCible.trim().isEmpty())) {
             throw new RuntimeException("Impossible de créer un profil utilisateur sans l'associer à une structure valide.");
         }
 
-        // 4. GÉNÉRATION SÉQUENTIELLE DU CODE UTILISATEUR
+        // 3. Génération séquentielle du Code Utilisateur
         if (isSuperAdmin) {
             long globalAdminCount = appUserRepo.countByCodeUserStartingWith("ROOT_") + 1;
             user.setCodeUser(String.format("ROOT_%04d", globalAdminCount));
         } else {
-            String structureCode = user.getCodeStructure().trim().toUpperCase();
-            long nextAgentSequence = appUserRepo.countByCodeStructure(structureCode) + 1;
-            user.setCodeUser(String.format("%s_%03d", structureCode, nextAgentSequence));
+            String cleanCodeStruct = codeStructureCible.trim().toUpperCase();
+            long nextAgentSequence = userStructureRepo.countByStructure_CodeStructure(cleanCodeStruct) + 1;
+            user.setCodeUser(String.format("%s_%03d", cleanCodeStruct, nextAgentSequence));
         }
 
-        // 5. Enregistrement en base de données
+        // 4. Enregistrement initial de l'utilisateur
         AppUser savedUser = appUserRepo.save(user);
 
-        // 6. ROUTAGE DES NOTIFICATIONS SELON LES RÈGLES MÉTIER
+        // 5. Création du lien associatif si ce n'est pas un Super Admin
         if (!isSuperAdmin) {
-            // TODO: Appeler votre passerelle WhatsApp à cette étape
-            // Envoi du message contenant : savedUser.getCodeStructure(), savedUser.getUserPhone(), clearPassword
-            this.sendCredentialsViaWhatsApp(savedUser.getUserPhone(), savedUser.getCodeStructure(), clearPassword);
+            Structure structure = structureRepo.findByCodeStructure(codeStructureCible.trim().toUpperCase())
+                    .stream().findFirst()
+                    .orElseThrow(() -> new RuntimeException("Structure introuvable avec le code: " + codeStructureCible));
+
+            UserStructure link = new UserStructure();
+            link.setUser(savedUser);
+            link.setStructure(structure);
+            link.setRoleInStructure(roleInitial != null ? roleInitial : "COLLABORATEUR"); 
+
+            userStructureRepo.save(link);
+
+            // Notification WhatsApp
+            this.sendCredentialsViaWhatsApp(savedUser.getUserPhone(), structure.getCodeStructure(), clearPassword);
         }
 
         return savedUser;
     }
 
     /**
-     * Méthode bouchon pour l'envoi WhatsApp
+     * Associer un utilisateur existant à une nouvelle structure supplémentaire (Multi-structure)
      */
+    public void associateUserToStructure(String userId, String codeStructure, String role) {
+        AppUser user = getAppUser(userId);
+        Structure structure = structureRepo.findByCodeStructure(codeStructure.trim().toUpperCase())
+                .stream().findFirst()
+                .orElseThrow(() -> new RuntimeException("Structure introuvable"));
+
+        Optional<UserStructure> existingLink = userStructureRepo.findByUserIdAndStructure_IdStructure(user.getId(), structure.getIdStructure());
+
+        if (existingLink.isPresent()) {
+            UserStructure link = existingLink.get();
+            link.setDeleted(false);
+            link.setRoleInStructure(role); 
+            link.setUpdatedAt(LocalDateTime.now());
+            userStructureRepo.save(link);
+        } else {
+            UserStructure newLink = new UserStructure();
+            newLink.setUser(user);
+            newLink.setStructure(structure);
+            newLink.setRoleInStructure(role); 
+            userStructureRepo.save(newLink);
+        }
+    }
+
+    public List<AppUser> getActiveUsersByStructure(String codeStructure) {
+        return userStructureRepo.findByStructure_CodeStructureAndDeletedFalse(codeStructure)
+                .stream()
+                .filter(link -> link.getUser() != null && Boolean.TRUE.equals(link.getUser().getActive())) // ✅ Filtre propre sur l'utilisateur actif
+                .map(UserStructure::getUser)
+                .collect(Collectors.toList());
+    }
+public List<AppUserDTO> getAllUsersByStructure(String structureId) {
+    return userStructureRepo.findUsersByStructureId(structureId)
+            .stream()
+            .map(this::convertToDTO) // Conversion ici
+            .collect(Collectors.toList());
+}
+    // Retirer un utilisateur d'une structure
+    public void removeUserFromStructure(String userId, String structureId) {
+        UserStructure link = userStructureRepo.findByUserIdAndStructure_IdStructure(userId, structureId)
+                .orElseThrow(() -> new RuntimeException("Association introuvable"));
+        link.setDeleted(true);
+        userStructureRepo.save(link);
+    }
+
     private void sendCredentialsViaWhatsApp(String phoneNumber, String codeStructure, String pinCode) {
         log.info("💬 [WhatsApp] Préparation de l'envoi vers {} - Structure: {} - PIN: {}", phoneNumber, codeStructure, pinCode);
-        // C'est ici que nous lierons votre connecteur WhatsApp dans la prochaine étape !
     }
 
     public String generateAndSetToken(AppUser user) {
-        // 1. Générer un Token robuste (UUID)
         String token = UUID.randomUUID().toString();
-
-        // 2. Définir la durée d'expiration (24 heures)
-        LocalDateTime expiryDate = LocalDateTime.now().plusHours(24);
-
-        // 3. Mettre à jour la structure
         user.setConfirmationToken(token);
-        user.setTokenExpiryDate(expiryDate);
-
-        // Le service doit ensuite persister ces changements
-        // (repository.save(structure))
-
+        user.setTokenExpiryDate(LocalDateTime.now().plusHours(24));
         return token;
     }
 
     public Optional<AppUser> findByConfirmationToken(String token) {
-        // L'appel utilise l'objet injecté structureRepository
         return appUserRepo.findByConfirmationToken(token);
     }
 
@@ -109,81 +155,65 @@ public class AppUserService {
     }
 
     public AppUser updateAppUser(AppUser us) {
-        try {
-            AppUser user = getAppUser(us.getId());
-            user.setId(us.getId());
-            appUserRepo.save(user);
-            return user;
-        } catch (Exception exception) {
-            throw new RuntimeException();
-        }
-    }
-
-    public List<AppUser> getActiveUsersByStructure(String codeStructure) {
-        return appUserRepo.findByCodeStructureAndIsActiveTrue(codeStructure);
-    }
-
-    // Modifier un utilisateur
-    public AppUser updateUser(String id, AppUser userDetails) {
-        AppUser user = appUserRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-        user.setUserName(userDetails.getUserName());
-        user.setUserPhone(userDetails.getUserPhone());
-        user.setUserProfile(userDetails.getUserProfile());
-        // On ne modifie pas le mot de passe ici pour des raisons de sécurité
-
+        AppUser user = getAppUser(us.getId());
+        user.setUpdatedAt(LocalDateTime.now());
         return appUserRepo.save(user);
     }
 
-    // Désactiver un utilisateur (Suppression logique)
+    public AppUser updateUser(String id, AppUser userDetails) {
+        AppUser user = appUserRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+        user.setUserName(userDetails.getUserName());
+        user.setUserPhone(userDetails.getUserPhone());
+        user.setUserProfile(userDetails.getUserProfile());
+        return appUserRepo.save(user);
+    }
+
     public void disableUser(String id) {
         AppUser user = appUserRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-        user.setActive(false);
+        user.setActive(false); // ✅ Remplacé user.setIsActive par user.setActive
         appUserRepo.save(user);
     }
 
-    // Supprimer définitivement
     public void deleteUser(String id) {
         appUserRepo.deleteById(id);
     }
 
-    public List<AppUser> getAllUsersByStructure(String codeStructure) {
-        return appUserRepo.findByCodeStructure(codeStructure);
-    }
-
-    // Changement de mot de passe
     public void changePassword(String userId, String newPassword) {
         AppUser user = appUserRepo.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-
-        // user.setUserPassword(passwordEncoder.encode(newPassword)); // Version
-        // sécurisée
         user.setUserPassword(passwordEncoder.encode(newPassword));
-
         appUserRepo.save(user);
     }
 
     public void toggleUserActive(String id, boolean status) {
         AppUser user = appUserRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-        user.setActive(status);
+        user.setActive(status); // ✅ Remplacé user.setIsActive par user.setActive
         appUserRepo.save(user);
     }
 
     public boolean isEmailUnique(String email) {
-        if (email == null || email.trim().isEmpty()) {
-            return true;
-        }
+        if (email == null || email.trim().isEmpty()) return true;
         return !appUserRepo.existsByUserEmail(email.trim());
     }
 
-    // ✅ Vérifier si un téléphone existe déjà
     public boolean isPhoneUnique(String phone) {
-        if (phone == null || phone.trim().isEmpty()) {
-            return true;
-        }
+        if (phone == null || phone.trim().isEmpty()) return true;
         return !appUserRepo.existsByUserPhone(phone.trim());
     }
+
+    public AppUserDTO convertToDTO(AppUser user) {
+    return AppUserDTO.builder()
+            .id(user.getId())
+            .userName(user.getUserName())
+            .userEmail(user.getUserEmail())
+            .userPhone(user.getUserPhone())
+            .codeUser(user.getCodeUser())
+            .active(user.getActive())
+            .userProfile(user.getUserProfile())
+            .build();
+}
+
 }

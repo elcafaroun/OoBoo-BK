@@ -1,29 +1,19 @@
 package io.c4us.masterbackend.repo;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
-
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 import io.c4us.masterbackend.domain.Structure;
+import io.c4us.masterbackend.domain.UserStructure;
 
+@Repository
 public interface StructureRepo extends JpaRepository<Structure, String> {
 
-    // Pour récupérer les structures d'un utilisateur spécifique
-    List<Structure> findByCreatedUserId(String userId);
+    List<Structure> findByCodeStructure(String codeStructure);
+
     boolean existsByNomStructureIgnoreCase(String nomStructure);
 
-    /**
-     * SYNCHRONISATION : Récupère uniquement les structures modifiées
-     * ou créées après une date précise pour un utilisateur.
-     * 
-     */
-    Optional<Structure> findByCodeStructure(String codeStructure);
-
-    List<Structure> findByCreatedUserIdAndLastUpdatedAfter(String userId, LocalDateTime lastSync);
-
-    /**
-     * Optionnel : Récupérer uniquement les structures non supprimées
-     */
-    List<Structure> findByCreatedUserIdAndDeletedFalse(String userId);
+  
 }

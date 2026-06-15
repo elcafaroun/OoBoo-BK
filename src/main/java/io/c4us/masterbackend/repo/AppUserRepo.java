@@ -4,33 +4,31 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import io.c4us.masterbackend.domain.AppUser;
 
+@Repository
 public interface AppUserRepo extends JpaRepository<AppUser, String> {
+    
     Optional<AppUser> findByConfirmationToken(String confirmationToken);
 
     Optional<AppUser> findById(String id);
 
-    AppUser findByUserEmail(String confirmationToken);
+    AppUser findByUserEmail(String email);
 
-    AppUser findByUserPhone(String phone); // 👈 ajoute cette ligne
+    AppUser findByUserPhone(String phone); 
 
-    List<AppUser> findByCodeStructureAndIsActiveTrue(String codeStructure);
-
-    List<AppUser> findByCodeStructure(String codeStructure);
-
-    long countByCodeStructure(String codeStructure);
+    AppUser findByCodeUser(String code);
 
     long countByCodeUserStartingWith(String prefix);
 
-    // Dans votre AppUserRepo.java
     boolean existsByUserEmail(String email);
 
     boolean existsByUserPhone(String phone);
 
-
-    
-    AppUser findByCodeUser(String code);
-
+    // ❌ Les méthodes findByCodeStructure, findByCodeStructureAndIsActiveTrue 
+    // ❌ et countByCodeStructure ont été définitivement supprimées.
 }

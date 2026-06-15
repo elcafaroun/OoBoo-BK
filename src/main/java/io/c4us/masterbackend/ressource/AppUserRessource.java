@@ -5,24 +5,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import io.c4us.masterbackend.DTOs.AppUserDTO;
 import io.c4us.masterbackend.DTOs.LoginRequest;
-import io.c4us.masterbackend.config.EmailService;
 import io.c4us.masterbackend.domain.AppUser;
 import io.c4us.masterbackend.repo.AppUserRepo;
 import io.c4us.masterbackend.service.AppUserService;
@@ -33,53 +24,61 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AppUserRessource {
 
-    @Autowired
-    private  AppUserService appUserService;
+    private final AppUserService appUserService;
+    private final PasswordEncoder passwordEncoder;
+    private final io.c4us.masterbackend.config.EmailService emailService;
+    private final AppUserRepo appUserRepo;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-    @Autowired
-    private EmailService emailService;
-
-    @Autowired
-    private AppUserRepo appUserRepo;
 
     @PostMapping
-    public ResponseEntity<AppUser> createAppUser(@RequestBody AppUser user) {
+    public ResponseEntity<AppUser> createAppUser(
+            @RequestBody AppUser user,
+            @RequestParam(required = false) String codeStructure,
+            @RequestParam(required = false, defaultValue = "COLLABORATEUR") String role) {
         try {
-            return ResponseEntity.created(URI.create("/user/userID"))
-                    .body(appUserService.createAppUser(user));
+            AppUser createdUser = appUserService.createAppUser(user, codeStructure, role);
+            return ResponseEntity.created(URI.create("/user/" + createdUser.getId()))
+                    .body(createdUser);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.badRequest().build();
         }
     }
 
+    /**
+     * Associer un utilisateur existant à une structure supplémentaire
+     * (Multi-structure)
+     */
+    @PostMapping("/{userId}/associate")
+    public ResponseEntity<Map<String, String>> associateToStructure(
+            @PathVariable String userId,
+            @RequestParam String codeStructure,
+            @RequestParam(required = false, defaultValue = "COLLABORATEUR") String role) {
+        try {
+            appUserService.associateUserToStructure(userId, codeStructure, role);
+            return ResponseEntity
+                    .ok(Map.of("message", "Utilisateur associé avec succès à la structure " + codeStructure));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/confirm")
     public ResponseEntity<String> confirmStructure(@RequestParam("token") String confirmationToken) {
-
-        // 1. Trouver la structure par le token
         Optional<AppUser> userOpt = appUserService.findByConfirmationToken(confirmationToken);
 
         if (userOpt.isEmpty()) {
-
             URI redirectUri = URI.create("http://localhost:5173/confirmation-error");
             return ResponseEntity.status(HttpStatus.FOUND).location(redirectUri).build();
-
         }
 
         AppUser appUser = userOpt.get();
-
-        // 2. Mettre à jour isActive à "true"
-        appUser.setActive(true);
-        appUser.setConfirmationToken(null); // Optionnel: Invalider le token après usage
+        appUser.setActive(true); // ✅ Mis à jour (setActive au lieu de setIsActive)
+        appUser.setConfirmationToken(null);
         appUserService.updateAppUser(appUser);
 
         URI redirectUri = URI.create("http://localhost:5173/login?confirmed=true");
         return ResponseEntity.status(HttpStatus.FOUND).location(redirectUri).build();
-
-        // Vous pouvez aussi utiliser un RedirectView pour rediriger vers une page de
-        // succès
     }
 
     @PostMapping("/resend-confirmation")
@@ -99,61 +98,65 @@ public class AppUserRessource {
         String identifier = request.getIdentifier();
         String password = request.getPassword();
 
-        // 1. Rechercher l’utilisateur (Email ou Téléphone)
         AppUser user = appUserRepo.findByUserEmail(identifier);
         if (user == null) {
             user = appUserRepo.findByUserPhone(identifier);
-            if(user==null){
-             user = appUserRepo.findByCodeUser(identifier);
+            if (user == null) {
+                user = appUserRepo.findByCodeUser(identifier);
             }
         }
 
-        // 2. Vérification existence et mot de passe
         if (user == null || !passwordEncoder.matches(password, user.getUserPassword())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body("Identifiants incorrects");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Identifiants incorrects");
         }
 
-        // 3. Vérification de l’activation du compte
-        if (!user.isActive()) {
+        if (!Boolean.TRUE.equals(user.getActive())) { // ✅ Mis à jour (getActive au lieu de getIsActive)
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body("Veuillez confirmer votre compte avant de vous connecter.");
         }
 
-        // ✅ 4. Connexion réussie : Utilisation de HashMap pour éviter le
-        // NullPointerException
+        // Extraction des structures associées pour l'application mobile PB-M
+        List<Map<String, Object>> structuresAssociees = user.getStructures().stream()
+                .filter(link -> !Boolean.TRUE.equals(link.getDeleted()))
+                .map(link -> {
+                    Map<String, Object> sMap = new HashMap<>();
+                    sMap.put("idStructure", link.getStructure().getIdStructure());
+                    sMap.put("nomStructure", link.getStructure().getNomStructure());
+                    sMap.put("codeStructure", link.getStructure().getCodeStructure());
+                    sMap.put("roleInStructure", link.getRoleInStructure());
+                    return sMap;
+                }).collect(Collectors.toList());
+
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Connexion réussie");
         response.put("id", user.getId());
         response.put("userName", user.getUserName());
         response.put("userPhone", user.getUserPhone());
-        response.put("userProfile", user.getUserProfile()); // Indispensable pour Flutter
-        response.put("codeStructure", user.getCodeStructure());
-        // On peut mettre l'email même s'il est null, HashMap l'acceptera
+        response.put("userProfile", user.getUserProfile());
         response.put("userEmail", user.getUserEmail());
+        response.put("isFirstLogin", user.getFirstLogin()); // ✅ Mis à jour (getFirstLogin au lieu de getIsFirstLogin)
+        response.put("structures", structuresAssociees);
 
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/structure/{codeStructure}")
-    public ResponseEntity<List<AppUser>> getUsersByStructure(@PathVariable String codeStructure) {
-        return ResponseEntity.ok(appUserService.getAllUsersByStructure(codeStructure));
-    }
+    // Dans StructureRessource.java
+   @GetMapping("/users/{codeStructure}")
+public ResponseEntity<List<AppUserDTO>> getUsersByStructure(@PathVariable String codeStructure) {
+    return ResponseEntity.ok(appUserService.getAllUsersByStructure(codeStructure));
+}
 
-    // 2. Modifier un utilisateur
     @PutMapping("/update/{id}")
     public ResponseEntity<AppUser> updateAppUser(@PathVariable String id, @RequestBody AppUser user) {
         return ResponseEntity.ok(appUserService.updateUser(id, user));
     }
 
-    // 3. Désactiver un utilisateur (Recommandé à la place de supprimer)
     @PatchMapping("/disable/{id}")
     public ResponseEntity<Void> disableAppUser(@PathVariable String id) {
         appUserService.disableUser(id);
         return ResponseEntity.noContent().build();
     }
 
-    // 4. Supprimer un utilisateur
     @DeleteMapping("/delete/{id}")
     public ResponseEntity<Void> deleteAppUser(@PathVariable String id) {
         appUserService.deleteUser(id);
@@ -163,7 +166,7 @@ public class AppUserRessource {
     @PatchMapping("/enable/{id}")
     public ResponseEntity<Void> enableAppUser(@PathVariable String id) {
         AppUser user = appUserService.getAppUser(id);
-        user.setActive(true);
+        user.setActive(true); // ✅ Mis à jour (setActive au lieu de setIsActive)
         appUserRepo.save(user);
         return ResponseEntity.noContent().build();
     }
@@ -173,21 +176,42 @@ public class AppUserRessource {
         appUserService.changePassword(id, request.get("newPassword"));
         return ResponseEntity.ok().build();
     }
+
     @GetMapping("/check-email")
     public ResponseEntity<Map<String, Boolean>> checkEmailAvailability(@RequestParam String email) {
-        boolean isUnique = appUserService.isEmailUnique(email);
-        // Renvoie un JSON propre {"available": true/false}
-        return ResponseEntity.ok(Map.of("available", isUnique));
+        return ResponseEntity.ok(Map.of("available", appUserService.isEmailUnique(email)));
+    }
+
+    @GetMapping("/check-phone")
+    public ResponseEntity<Map<String, Boolean>> checkPhoneAvailability(@RequestParam String phone) {
+        return ResponseEntity.ok(Map.of("available", appUserService.isPhoneUnique(phone)));
+    }
+
+    @PatchMapping("/change-password/{id}")
+    public ResponseEntity<?> changeFirstPassword(@PathVariable String id, @RequestBody Map<String, String> request) {
+        AppUser user = appUserRepo.findById(id).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Utilisateur non trouvé");
+        }
+
+        String newPassword = request.get("newPassword");
+        if (newPassword == null || newPassword.length() != 4) {
+            return ResponseEntity.badRequest().body("Le code PIN doit contenir exactement 4 chiffres");
+        }
+
+        user.setUserPassword(passwordEncoder.encode(newPassword));
+        user.setFirstLogin(false); // ✅ Mis à jour (setFirstLogin au lieu de setIsFirstLogin)
+        appUserRepo.save(user);
+
+        return ResponseEntity.ok(Map.of("message", "Mot de passe mis à jour avec succès"));
     }
 
     /**
-     * 🔹 Endpoint : Vérifier la disponibilité d'un numéro de téléphone
-     * URL : GET /api/v1/users/check-phone?phone=70000000
+     * Supprimer l'affectation d'un utilisateur à une structure
      */
-    @GetMapping("/check-phone")
-    public ResponseEntity<Map<String, Boolean>> checkPhoneAvailability(@RequestParam String phone) {
-        boolean isUnique = appUserService.isPhoneUnique(phone);
-        // Renvoie un JSON propre {"available": true/false}
-        return ResponseEntity.ok(Map.of("available", isUnique));
+    @DeleteMapping("/{userId}/structure/{structureId}")
+    public ResponseEntity<Void> removeUserFromStructure(@PathVariable String userId, @PathVariable String structureId) {
+        appUserService.removeUserFromStructure(userId, structureId);
+        return ResponseEntity.noContent().build();
     }
 }

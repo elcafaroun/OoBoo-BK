@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,36 +19,46 @@ import org.springframework.web.multipart.MultipartFile;
 import io.c4us.masterbackend.domain.Structure;
 import io.c4us.masterbackend.service.StructureService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("/structure")
 @RequiredArgsConstructor
-// @CrossOrigin(origins = "http://localhost:5173")
+@Slf4j
 public class StructureRessource {
 
     private final StructureService structureService;
 
+    /**
+     * 🔹 Création d'une structure (Sécurisée contre les paramètres manquants)
+     */
     @PostMapping
-    public ResponseEntity<Structure> createStructure(@RequestBody Structure struct) {
+    public ResponseEntity<?> createStructure(
+            @RequestBody Structure struct,
+            @RequestParam(value = "userId", required = false) String userId) { 
+        
+        // Validation manuelle propre pour éviter le crash brut DefaultHandlerExceptionResolver
+        if (userId == null || userId.trim().isEmpty()) {
+            log.error("⚠️ Tentative de création de structure refusée : 'userId' manquant dans les query parameters.");
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body("Erreur : Le paramètre 'userId' est obligatoire pour lier cette structure à un utilisateur.");
+        }
+
         try {
-            // Utilisation de l'ID de l'objet créé pour l'URI
-            Structure created = structureService.createStructure(struct);
+            Structure created = structureService.createStructure(struct, userId.trim());
             return ResponseEntity.created(URI.create("/structure/" + created.getIdStructure()))
                     .body(created);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+            log.error("❌ Erreur lors de la création de la structure : {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
         }
     }
 
-    /**
-     * ENDPOINT DE SYNCHRONISATION (Crucial pour le mode Offline)
-     * Flutter appellera : /structure/sync/user123?lastSync=2026-03-13T10:00:00
-     */
     @GetMapping("/sync/{userId}")
     public ResponseEntity<List<Structure>> syncStructures(
             @PathVariable String userId,
             @RequestParam(value = "lastSync", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime lastSync) {
-
         return ResponseEntity.ok(structureService.getUpdatesForSync(userId, lastSync));
     }
 
@@ -66,8 +77,12 @@ public class StructureRessource {
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<Structure>> getByUser(@PathVariable String userId) {
-        // Retourne uniquement les structures actives pour l'affichage standard
         return ResponseEntity.ok(structureService.getStructuresByUser(userId));
+    }
+
+    @GetMapping("/structure/{codeStructure}")
+    public ResponseEntity<List<Structure>> getByCodeStructure(@PathVariable String codeStructure) {
+        return ResponseEntity.ok(structureService.getStructuresByCodeStructure(codeStructure));
     }
 
     @GetMapping
@@ -77,7 +92,6 @@ public class StructureRessource {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Structure> delStructure(@PathVariable(value = "id") String id) {
-        // Le service effectue maintenant un Soft Delete
         return ResponseEntity.ok().body(structureService.delStructure(id));
     }
 
@@ -86,10 +100,6 @@ public class StructureRessource {
         return ResponseEntity.ok(structureService.getStructure(id));
     }
 
-    /**
-     * Permet de renouveler ou changer le plan d'une structure.
-     * Appelée par l'application Flutter lors du renouvellement.
-     */
     @PutMapping("/update-plan")
     public ResponseEntity<Structure> updateStructurePlan(
             @RequestParam String id,
@@ -97,7 +107,6 @@ public class StructureRessource {
         try {
             return ResponseEntity.ok(structureService.updateStructurePlan(id, plan));
         } catch (Exception e) {
-            // Retourne 400 si le plan n'existe pas ou si l'id est invalide
             return ResponseEntity.badRequest().build();
         }
     }
@@ -107,5 +116,4 @@ public class StructureRessource {
         boolean exists = structureService.checkIfNameExists(nom);
         return ResponseEntity.ok(exists);
     }
-
 }

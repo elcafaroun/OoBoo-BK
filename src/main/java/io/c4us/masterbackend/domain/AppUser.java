@@ -1,18 +1,11 @@
 package io.c4us.masterbackend.domain;
 
 import java.time.LocalDateTime;
-
+import java.util.HashSet;
+import java.util.Set;
 import org.hibernate.annotations.UuidGenerator;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
 
 @Entity
 @Getter
@@ -21,6 +14,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @Table(name = "users")
 public class AppUser {
+    
     @Id
     @UuidGenerator
     @Column(name = "id", unique = true, updatable = false)
@@ -29,28 +23,63 @@ public class AppUser {
     private String userName;
     private String userEmail;
     private String userPhone;
-    private LocalDateTime createdDate = LocalDateTime.now();
-    // Ajout pour la synchronisation
+    
+    @Column(name = "created_date", updatable = false)
+    private LocalDateTime createdDate;
+    
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     private String codeUser;
-
+    
     @Version
-    private Long version; // Pour la gestion des conflits
-
-    private boolean isActive = true;
-    private boolean deleted = false; // Pour notifier le mobile d'une suppression
+    private Long version; 
+    
+    // ✅ CORRECTION : Supprimer le préfixe 'is' pour avoir getFirstLogin() et setFirstLogin() standardisés
+    @Column(name = "is_first_login", nullable = false)
+    private Boolean firstLogin = true;
+    
+    // ✅ CORRECTION : Supprimer le préfixe 'is' pour avoir getActive() et setActive() proprement générés
+    @Column(name = "is_active", nullable = false)
+    private Boolean active = true;
+    
+    @Column(nullable = false)
+    private Boolean deleted = false; 
 
     private String userPassword;
     private String confirmationToken;
     private LocalDateTime tokenExpiryDate;
     private String userProfile;
-    private String codeStructure;
 
-    @jakarta.persistence.PreUpdate
-    @jakarta.persistence.PrePersist
+    // Relation Many-to-Many via la table d'association
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ToString.Exclude 
+    @EqualsAndHashCode.Exclude 
+    private Set<UserStructure> structures = new HashSet<>();
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdDate = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        if (this.firstLogin == null) this.firstLogin = true;
+        if (this.active == null) this.active = true;
+        if (this.deleted == null) this.deleted = false;
+    }
+
+    @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    // 💡 Helper pour ajouter proprement une structure à l'utilisateur
+    public void addStructure(UserStructure userStructure) {
+        this.structures.add(userStructure);
+        userStructure.setUser(this);
+    }
+
+    // 💡 Helper pour supprimer proprement une structure de l'utilisateur
+    public void removeStructure(UserStructure userStructure) {
+        this.structures.remove(userStructure);
+        userStructure.setUser(null);
     }
 }
