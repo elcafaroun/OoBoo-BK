@@ -93,7 +93,7 @@ public Command createCommand(CommandDto commandDto) {
 
     private void configurerMontants(Command command, CommandDto dto) {
         String method = dto.getPaymentMethod() != null ? dto.getPaymentMethod().toLowerCase() : "";
-        if (method.contains("credit") || method.contains("crédit")) {
+        if (method.contains("credit") || method.contains("crédit") || method.contains("pending") || method.contains("PENDING ")) {
             command.setTotalAmount(0.0);
             command.setTotalCredit(dto.getTotalAmount());
             command.setStatus("PENDING");

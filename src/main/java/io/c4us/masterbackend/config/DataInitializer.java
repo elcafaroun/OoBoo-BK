@@ -1,7 +1,6 @@
 package io.c4us.masterbackend.config;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
 
 import org.springframework.boot.CommandLineRunner;
