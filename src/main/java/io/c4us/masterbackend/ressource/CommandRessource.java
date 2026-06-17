@@ -18,6 +18,7 @@ import io.c4us.masterbackend.service.CommandService;
 import io.c4us.masterbackend.service.DepenseService;
 import lombok.RequiredArgsConstructor;
 
+
 @RestController
 @RequestMapping("/command")
 @RequiredArgsConstructor
@@ -104,6 +105,7 @@ public class CommandRessource {
 
     @PutMapping("/{id}/cancel")
     public ResponseEntity<Command> cancelCommand(@PathVariable String id) {
+       // System.out.println(">>> REQUETE SETTLE RECUE : ID=" + id + ", Montant=" + dto.getAmountPaid());
         Command updatedCommand = commandService.cancelOrder(id);
         return ResponseEntity.ok(updatedCommand);
     }
@@ -114,6 +116,7 @@ public class CommandRessource {
                 id,
                 dto.getAmountPaid(),
                 dto.getPaymentMethod());
+                System.out.println(">>> REQUETE SETTLE RECUE : ID=" + id + ", Montant=" + dto.getAmountPaid());
         return ResponseEntity.ok(updatedCommand);
     }
 }
