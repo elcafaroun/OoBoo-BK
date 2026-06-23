@@ -103,6 +103,8 @@ public class CategoryService {
         return categoryRepo.findAll(PageRequest.of(page, size, Sort.by("createdDate")));
     }
 
+
+
     // --- GESTION DES PHOTOS ---
 
     public String uploadPhoto(String id, MultipartFile file) {

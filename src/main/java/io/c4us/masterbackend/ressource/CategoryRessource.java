@@ -4,6 +4,7 @@ import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.hibernate.query.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -53,13 +54,17 @@ public class CategoryRessource {
         return ResponseEntity.ok(updated);
     }
 
-   @GetMapping
+/*  @GetMapping
 public List<Category> getAllCategories() {
-    // Si vous voulez vraiment TOUTES les catégories de la base
     return categoryService.getAllCategories(0, 100).getContent(); 
+} */
+
+@GetMapping
+public ResponseEntity<org.springframework.data.domain.Page<Category>> getAllCategories(
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "10") int size) {
     
-    // OU, si vous voulez les catégories d'une structure par défaut
-    // return categoryService.getCategoryByStructure("VOTRE_CODE_PAR_DEFAUT");
+    return ResponseEntity.ok(categoryService.getAllCategories(page, size));
 }
 
     @GetMapping("/{id}")

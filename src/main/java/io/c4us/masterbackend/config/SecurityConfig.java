@@ -27,23 +27,20 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable()) 
-            // 🔑 On lie explicitement le CORS au Bean défini plus bas
             .cors(cors -> cors.configurationSource(corsConfigurationSource())) 
             .authorizeHttpRequests(auth -> auth
+                // ✅ Autorise l'accès à Swagger et à la doc OpenAPI
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                // Autorise tout le reste (adaptez selon vos besoins réels)
                 .anyRequest().permitAll()
             );
         return http.build();
     }
 
-    // ✅ Ce Bean est INDISPENSABLE pour corriger l'erreur de log
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
-        // On utilise allowedOriginPatterns au lieu de allowedOrigins("*")
-        // pour satisfaire la condition allowCredentials(true)
         configuration.setAllowedOriginPatterns(List.of("*")); 
-        
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "Accept"));
         configuration.setAllowCredentials(true);

@@ -13,18 +13,20 @@ import io.c4us.masterbackend.domain.UserStructure;
 @Repository
 public interface UserStructureRepo extends JpaRepository<UserStructure, String> {
 
-    // ✅ 1. Récupérer toutes les liaisons d'un utilisateur
-    List<UserStructure> findByUserId(String userId);
+    // ❌ INCORRECT : findByUserId (Spring cherche un champ 'userId' inexistant)
+    // ✅ CORRECT : findByUser_Id
+    List<UserStructure> findByUser_Id(String userId);
 
-    // ✅ 2. Trouver la liaison unique par utilisateur et ID de la structure
-    Optional<UserStructure> findByUserIdAndStructure_IdStructure(String userId, String idStructure);
+    // ❌ INCORRECT : findByUserIdAndStructure_IdStructure
+    // ✅ CORRECT : findByUser_IdAndStructure_IdStructure
+    Optional<UserStructure> findByUser_IdAndStructure_IdStructure(String userId, String idStructure);
 
-    // ✅ 3. Récupérer les liaisons actives d'une structure via son code
+    // ✅ Les autres méthodes sont correctes car elles utilisent bien la syntaxe 'Objet_Champ'
     List<UserStructure> findByStructure_CodeStructureAndDeletedFalse(String codeStructure);
 
-    // ✅ 4. Compter les liaisons pour générer le CodeUser séquentiel
     long countByStructure_CodeStructure(String codeStructure);
 
+    // Cette requête est excellente, elle évite le problème N+1
     @Query("SELECT us FROM UserStructure us JOIN FETCH us.structure WHERE us.user.id = :userId AND us.deleted = false")
     List<UserStructure> findByUserIdWithStructures(@Param("userId") String userId);
 
@@ -32,5 +34,4 @@ public interface UserStructureRepo extends JpaRepository<UserStructure, String> 
 
     @Query("SELECT us.user FROM UserStructure us WHERE us.structure.idStructure = :structId AND us.deleted = false")
     List<AppUser> findUsersByStructureId(@Param("structId") String structId);
-
 }

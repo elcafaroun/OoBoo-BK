@@ -97,7 +97,7 @@ public class AppUserService {
                 .stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Structure introuvable"));
 
-        Optional<UserStructure> existingLink = userStructureRepo.findByUserIdAndStructure_IdStructure(user.getId(), structure.getIdStructure());
+        Optional<UserStructure> existingLink = userStructureRepo.findByUser_IdAndStructure_IdStructure(user.getId(), structure.getIdStructure());
 
         if (existingLink.isPresent()) {
             UserStructure link = existingLink.get();
@@ -129,7 +129,7 @@ public List<AppUserDTO> getAllUsersByStructure(String structureId) {
 }
     // Retirer un utilisateur d'une structure
     public void removeUserFromStructure(String userId, String structureId) {
-        UserStructure link = userStructureRepo.findByUserIdAndStructure_IdStructure(userId, structureId)
+        UserStructure link = userStructureRepo.findByUser_IdAndStructure_IdStructure(userId, structureId)
                 .orElseThrow(() -> new RuntimeException("Association introuvable"));
         link.setDeleted(true);
         userStructureRepo.save(link);
@@ -216,4 +216,8 @@ public List<AppUserDTO> getAllUsersByStructure(String structureId) {
             .build();
 }
 
+public List<UserStructure> getUserStructuresByUserId(String userId) {
+        return userStructureRepo.findByUser_Id(userId);
+
+}
 }

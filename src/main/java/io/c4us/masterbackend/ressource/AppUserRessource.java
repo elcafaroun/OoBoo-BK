@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import io.c4us.masterbackend.DTOs.AppUserDTO;
 import io.c4us.masterbackend.DTOs.LoginRequest;
 import io.c4us.masterbackend.domain.AppUser;
+import io.c4us.masterbackend.domain.UserStructure;
 import io.c4us.masterbackend.repo.AppUserRepo;
 import io.c4us.masterbackend.service.AppUserService;
 import lombok.RequiredArgsConstructor;
@@ -214,4 +215,9 @@ public ResponseEntity<List<AppUserDTO>> getUsersByStructure(@PathVariable String
         appUserService.removeUserFromStructure(userId, structureId);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/user-structures/{userId}")
+public List<UserStructure> getUserStructures(@PathVariable String userId) {
+    return appUserService.getUserStructuresByUserId(userId);
+}
 }
