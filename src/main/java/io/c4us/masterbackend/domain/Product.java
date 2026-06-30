@@ -2,6 +2,9 @@ package io.c4us.masterbackend.domain;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,18 +19,28 @@ import lombok.*;
         @UniqueConstraint(
             name = "uk_product_name_category", 
             columnNames = {"productName", "categoryId", "codeStructure"}
+        ),
+        // ✅ Sécurité : Un code QR/barres doit être unique au sein d'une même structure
+        @UniqueConstraint(
+            name = "uk_product_qrcode_structure",
+            columnNames = {"productQrCode", "codeStructure"}
         )
     }
 )
 public class Product implements Serializable {
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID) // Ajout de cette ligne
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", unique = true, nullable = false, updatable = false)
     private String id;
 
     private String productId;
     private String productPhotoUrl;
     private String productName;
+    
+@JsonProperty("productQrCode") // Indique explicitement comment mapper le JSON
+@Column(name = "product_qr_code")
+private String productQrCode;
+
     private Double productPrice;
     private Double prixAchat;
     private String productDescription;

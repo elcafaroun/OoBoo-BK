@@ -49,6 +49,7 @@ public class ProductService {
 
     public Product createProduct(Product product) {
         product.setLastUpdated(LocalDateTime.now());
+        System.out.println("Code QR reçu : " + product.getProductQrCode()); // Regardez ce qui s'affiche ici
         product.setDeleted(false);
         return productRepo.save(product);
     }
