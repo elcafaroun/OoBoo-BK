@@ -12,4 +12,6 @@ public class CommandDto {
     private String codeStructure;
     private List<CommandLineDTO> items;
     private Double totalAmount;
+    private String userId;
+private String userName;
 }

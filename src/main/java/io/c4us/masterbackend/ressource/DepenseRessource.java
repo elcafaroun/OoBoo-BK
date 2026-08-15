@@ -8,12 +8,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.sql.Date;
 import java.util.List;
+import java.util.Map; // <-- Importation ajoutée pour la Map
 
 @RestController
 @RequestMapping("/depense")
 @RequiredArgsConstructor
-//@CrossOrigin(originPatterns = "*", allowCredentials = "true") // ✅ Change origins par originPatterns
-//@CrossOrigin(origins = "*")
 public class DepenseRessource {
 
     private final DepenseService depenseService;
@@ -45,5 +44,18 @@ public class DepenseRessource {
             @RequestParam Date end, 
             @RequestParam String code) {
         return ResponseEntity.ok(depenseService.getSumBetween(start, end, code));
+    }
+
+    @GetMapping("/structure/{code}/monthly-daily-expenses")
+    public ResponseEntity<Map<String, Double>> getMonthlyDailyExpenses(
+            @PathVariable String code,
+            @RequestParam String period) { // Prend en paramètre la période (ex: "2026-07")
+        return ResponseEntity.ok(depenseService.getMonthlyDailyExpenses(code, period));
+    }
+
+    @GetMapping("/structure/{code}/by-user")
+    public ResponseEntity<List<Map<String, Object>>> getExpensesGroupedByUser(
+            @PathVariable String code) {
+        return ResponseEntity.ok(depenseService.getExpensesGroupedByUser(code));
     }
 }

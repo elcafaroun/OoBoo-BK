@@ -22,4 +22,11 @@ public interface DepenseRepository extends JpaRepository<Depense, Long> {
     // Somme des dépenses entre deux dates
     @Query("SELECT SUM(CAST(d.amount AS double)) FROM Depense d WHERE d.dateDepense BETWEEN :startDate AND :endDate AND d.codeStructure = :code")
     Double sumBetweenDates(@Param("startDate") Date startDate, @Param("endDate") Date endDate, @Param("code") String code);
+
+  List<Depense> findByCodeStructureAndDateDepenseBetween(
+            String codeStructure, 
+            Date start, 
+            Date end
+    );
+
 }

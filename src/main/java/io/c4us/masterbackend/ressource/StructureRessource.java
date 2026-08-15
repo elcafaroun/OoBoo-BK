@@ -16,6 +16,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.c4us.masterbackend.DTOs.CategoryStatusUpdateDTO;
+import io.c4us.masterbackend.DTOs.StructureStatusUpdateDTO;
 import io.c4us.masterbackend.domain.Structure;
 import io.c4us.masterbackend.service.StructureService;
 import lombok.RequiredArgsConstructor;
@@ -116,4 +120,55 @@ public class StructureRessource {
         boolean exists = structureService.checkIfNameExists(nom);
         return ResponseEntity.ok(exists);
     }
+
+      @PatchMapping("/updateStatus/{id}")
+    public ResponseEntity<Structure> updateStatus(
+            @PathVariable String id,
+            @RequestBody StructureStatusUpdateDTO dto) {
+        Structure updated = structureService.updateActiveStatus(id, dto.isActive());
+        return ResponseEntity.ok(updated);
+    }
+
+
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateStructure(
+            @PathVariable String id,
+            @RequestParam(value = "structure", required = false) String structureJson,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(required = false) java.util.Map<String, String> allParams) {
+        
+        // Log de contrôle pour vérifier ce qui arrive réellement du client Flutter
+        log.info("📥 [DEBUG] ID: {}, Fichier reçu: {}, Taille: {} octets, JSON structure présent: {}", 
+            id, 
+            (file != null ? file.getOriginalFilename() : "AUCUN FICHIER"), 
+            (file != null ? file.getSize() : 0), 
+            (structureJson != null));
+
+        try {
+            Structure structureDetails = new Structure();
+            
+            if (structureJson != null && !structureJson.isEmpty()) {
+                ObjectMapper objectMapper = new ObjectMapper();
+                structureDetails = objectMapper.readValue(structureJson, Structure.class);
+            } else {
+                if (allParams.containsKey("nomStructure")) structureDetails.setNomStructure(allParams.get("nomStructure"));
+                if (allParams.containsKey("typeStructure")) structureDetails.setTypeStructure(allParams.get("typeStructure"));
+                if (allParams.containsKey("descriptionStructure")) structureDetails.setDescriptionStructure(allParams.get("descriptionStructure"));
+                if (allParams.containsKey("villeStructure")) structureDetails.setVilleStructure(allParams.get("villeStructure"));
+                if (allParams.containsKey("codePoste")) structureDetails.setCodePoste(allParams.get("codePoste"));
+                if (allParams.containsKey("rueStructure")) structureDetails.setRueStructure(allParams.get("rueStructure"));
+                if (allParams.containsKey("geoLocStructure")) structureDetails.setGeoLocStructure(allParams.get("geoLocStructure"));
+            }
+
+            // Appel de la méthode unifiée du service
+            Structure updated = structureService.updateStructureAndPhoto(id, structureDetails, file);
+            return ResponseEntity.ok(updated);
+            
+        } catch (Exception e) {
+            log.error("❌ Erreur lors de la mise à jour de la structure : {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erreur serveur : " + e.getMessage());
+        }
+    }
+ 
 }

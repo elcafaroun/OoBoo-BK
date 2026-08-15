@@ -1,6 +1,7 @@
 package io.c4us.masterbackend.ressource;
 
 import java.net.URI;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-
 import io.c4us.masterbackend.domain.Customer;
 import io.c4us.masterbackend.service.CustomerService;
 import lombok.RequiredArgsConstructor;
@@ -25,13 +25,12 @@ public class CustomerRessource {
 
     private final CustomerService customerService;
 
-    
-
     @PostMapping
     public ResponseEntity<Customer> createCustomer(@RequestBody Customer customer) {
         try {
-            return ResponseEntity.created(URI.create("/customer/userID"))
-                    .body(customerService.createCustomer(customer));
+            Customer created = customerService.createCustomer(customer);
+            return ResponseEntity.created(URI.create("/customer/" + created.getId()))
+                    .body(created);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.badRequest().build();
@@ -40,8 +39,13 @@ public class CustomerRessource {
 
     @PostMapping("/update")
     public ResponseEntity<Customer> updateCustomer(@RequestBody Customer customer) {
-        return ResponseEntity.created(URI.create("/customer/update/userID"))
-                .body(customerService.updateCustomer(customer));
+        try {
+            Customer updated = customerService.updateCustomer(customer);
+            return ResponseEntity.ok(updated); // 200 OK pour une mise à jour
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @GetMapping
@@ -60,4 +64,14 @@ public class CustomerRessource {
         return ResponseEntity.ok().body(customerService.delCustomer(id));
     }
 
+    @GetMapping("/number/{numCust}")
+    public ResponseEntity<Customer> getCustomerByNumCust(@PathVariable String numCust) {
+        return customerService.getCustomerByNumCust(numCust)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+    @GetMapping("/structure/{codeStructure}")
+    public ResponseEntity<List<Customer>> getCustomersByStructure(@PathVariable(value = "codeStructure") String codeStructure) {
+        return ResponseEntity.ok().body(customerService.getCustomersByStructure(codeStructure));
+    }
 }

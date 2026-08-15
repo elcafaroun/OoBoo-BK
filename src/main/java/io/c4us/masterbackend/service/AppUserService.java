@@ -213,6 +213,7 @@ public List<AppUserDTO> getAllUsersByStructure(String structureId) {
             .codeUser(user.getCodeUser())
             .active(user.getActive())
             .userProfile(user.getUserProfile())
+            .lastSyncDate(user.getLastSyncDate()) 
             .build();
 }
 
@@ -220,4 +221,13 @@ public List<UserStructure> getUserStructuresByUserId(String userId) {
         return userStructureRepo.findByUser_Id(userId);
 
 }
+public void updateLastSyncDate(String userId) {
+    AppUser user = appUserRepo.findById(userId)
+            .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé avec l'ID : " + userId));
+    
+    user.setLastSyncDate(LocalDateTime.now());
+    appUserRepo.save(user);
+    log.info("🔄 Date de synchronisation mise à jour pour l'utilisateur : {}", userId);
+}
+
 }

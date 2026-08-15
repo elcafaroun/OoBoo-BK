@@ -20,6 +20,10 @@ public class AppUser {
     @Column(name = "id", unique = true, updatable = false)
     private String id;
 
+    // Dans AppUser.java
+@Column(name = "last_sync_date")
+private LocalDateTime lastSyncDate;
+
     private String userName;
     private String userEmail;
     private String userPhone;

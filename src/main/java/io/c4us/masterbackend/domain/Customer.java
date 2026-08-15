@@ -24,6 +24,7 @@ public class Customer implements Serializable {
     private String numCust;
     private String codePin;
     private String customerName;
+    private String codeStructure;
         private LocalDateTime createdDate = LocalDateTime.now();
            @Version
     private Long version; //

@@ -14,7 +14,7 @@ import io.c4us.masterbackend.domain.UserStructure;
 public interface UserStructureRepo extends JpaRepository<UserStructure, String> {
 
     // ❌ INCORRECT : findByUserId (Spring cherche un champ 'userId' inexistant)
-    // ✅ CORRECT : findByUser_Id
+   
     List<UserStructure> findByUser_Id(String userId);
 
     // ❌ INCORRECT : findByUserIdAndStructure_IdStructure

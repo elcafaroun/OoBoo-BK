@@ -1,4 +1,5 @@
 package io.c4us.masterbackend.repo;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -10,5 +11,6 @@ public interface CustomerRepo extends JpaRepository<Customer, String>{
     
     @SuppressWarnings("null")
     Optional<Customer> findById(String id);
-    Optional<Customer> findBynumCust(String numcust);
+    Optional<Customer> findByNumCust(String numCust);
+   List<Customer> findByCodeStructure(String codeStructure); // ✅ À ajouter si ce n'est pas déjà fait
 }

@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.*;
 
 import io.c4us.masterbackend.DTOs.CommandDto;
 import io.c4us.masterbackend.DTOs.SettleCreditDto;
+import io.c4us.masterbackend.DTOs.UserSalesDto;
 import io.c4us.masterbackend.domain.Command;
 import io.c4us.masterbackend.service.CommandService;
 import io.c4us.masterbackend.service.DepenseService;
 import lombok.RequiredArgsConstructor;
-
 
 @RestController
 @RequestMapping("/command")
@@ -105,7 +105,8 @@ public class CommandRessource {
 
     @PutMapping("/{id}/cancel")
     public ResponseEntity<Command> cancelCommand(@PathVariable String id) {
-       // System.out.println(">>> REQUETE SETTLE RECUE : ID=" + id + ", Montant=" + dto.getAmountPaid());
+        // System.out.println(">>> REQUETE SETTLE RECUE : ID=" + id + ", Montant=" +
+        // dto.getAmountPaid());
         Command updatedCommand = commandService.cancelOrder(id);
         return ResponseEntity.ok(updatedCommand);
     }
@@ -116,7 +117,27 @@ public class CommandRessource {
                 id,
                 dto.getAmountPaid(),
                 dto.getPaymentMethod());
-                System.out.println(">>> REQUETE SETTLE RECUE : ID=" + id + ", Montant=" + dto.getAmountPaid());
+        System.out.println(">>> REQUETE SETTLE RECUE : ID=" + id + ", Montant=" + dto.getAmountPaid());
         return ResponseEntity.ok(updatedCommand);
     }
+
+    @GetMapping("/structure/{codeStructure}/sales-by-user")
+    public ResponseEntity<List<UserSalesDto>> getSalesByUser(@PathVariable String codeStructure) {
+        try {
+            List<UserSalesDto> stats = commandService.getSalesByUserForStructure(codeStructure);
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            System.err.println(">>> ERREUR STATS AGENTS : " + e.getMessage());
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/structure/{codeStructure}/monthly-daily-sales")
+public ResponseEntity<Map<String, Double>> getMonthlyDailySales(
+        @PathVariable String codeStructure,
+        @RequestParam String period) { // period sera au format "YYYY-MM" (ex: "2026-07")
+    
+    Map<String, Double> salesData = commandService.getDailySalesForMonth(codeStructure, period);
+    return ResponseEntity.ok(salesData);
+}
 }

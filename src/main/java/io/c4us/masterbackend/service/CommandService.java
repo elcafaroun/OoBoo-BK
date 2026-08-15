@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.c4us.masterbackend.DTOs.CommandDto;
+import io.c4us.masterbackend.DTOs.UserSalesDto;
 import io.c4us.masterbackend.config.EmailService;
 import io.c4us.masterbackend.domain.Command;
 import io.c4us.masterbackend.domain.CommandLine;
@@ -33,7 +34,7 @@ public class CommandService {
 
     // --- CRÉATION & LOGIQUE MÉTIER ---
 
-public Command createCommand(CommandDto commandDto) {
+    public Command createCommand(CommandDto commandDto) {
         log.info("Réception d'une commande avec l'ID: {}", commandDto.getId());
 
         // 1. VERIFICATION D'EXISTENCE (Idempotence)
@@ -48,10 +49,12 @@ public Command createCommand(CommandDto commandDto) {
         Command command = new Command();
         command.setId(commandDto.getId()); // On utilise l'ID de Flutter
         command.setVersion(0L); // Force le statut "isNew"
-        
+
         command.setCustomerName(commandDto.getCustomerName());
         command.setCodeStructure(commandDto.getCodeStructure());
         command.setPaymentMethod(commandDto.getPaymentMethod());
+        command.setUserId(commandDto.getUserId());
+        command.setUserName(commandDto.getUserName());
         command.setLastUpdated(LocalDateTime.now());
         command.setOrderDate(LocalDateTime.now());
 
@@ -64,16 +67,15 @@ public Command createCommand(CommandDto commandDto) {
                 line.setQuantity(itemDto.getQuantity());
                 line.setUnitPrice(itemDto.getUnitPrice());
                 line.setCodeStructure(commandDto.getCodeStructure());
-                
+
                 // Lie la ligne à la commande
                 command.addLigneCommande(line);
 
                 // Mise à jour du stock local au Burkina
                 updateStockAndCheckAlert(
-                    itemDto.getProductName(), 
-                    itemDto.getQuantity(), 
-                    commandDto.getCodeStructure()
-                );
+                        itemDto.getProductName(),
+                        itemDto.getQuantity(),
+                        commandDto.getCodeStructure());
             }
         }
 
@@ -87,13 +89,14 @@ public Command createCommand(CommandDto commandDto) {
             return saved;
         } catch (Exception e) {
             log.error("❌ Erreur lors de l'enregistrement SQL: {}", e.getMessage());
-            throw e; 
+            throw e;
         }
     }
 
     private void configurerMontants(Command command, CommandDto dto) {
         String method = dto.getPaymentMethod() != null ? dto.getPaymentMethod().toLowerCase() : "";
-        if (method.contains("credit") || method.contains("crédit") || method.contains("pending") || method.contains("PENDING ")) {
+        if (method.contains("credit") || method.contains("crédit") || method.contains("pending")
+                || method.contains("PENDING ")) {
             command.setTotalAmount(0.0);
             command.setTotalCredit(dto.getTotalAmount());
             command.setStatus("PENDING");
@@ -139,15 +142,16 @@ public Command createCommand(CommandDto commandDto) {
     @Transactional
     public Command cancelOrder(String commandId) {
         Command command = findCommandById(commandId);
-        if ("CANCELLED".equals(command.getStatus())) return command;
+        if ("CANCELLED".equals(command.getStatus()))
+            return command;
 
         for (CommandLine item : command.getItems()) {
             productRepo.findProductByStructure(item.getProductName(), command.getCodeStructure())
-                .ifPresent(product -> {
-                    product.setProductQte(product.getProductQte() + item.getQuantity());
-                    product.setLastUpdated(LocalDateTime.now());
-                    productRepo.save(product);
-                });
+                    .ifPresent(product -> {
+                        product.setProductQte(product.getProductQte() + item.getQuantity());
+                        product.setLastUpdated(LocalDateTime.now());
+                        productRepo.save(product);
+                    });
         }
         command.setStatus("CANCELLED");
         command.setLastUpdated(LocalDateTime.now());
@@ -161,11 +165,12 @@ public Command createCommand(CommandDto commandDto) {
         double currentCredit = (command.getTotalCredit() != null) ? command.getTotalCredit() : 0.0;
         double currentAmount = (command.getTotalAmount() != null) ? command.getTotalAmount() : 0.0;
 
-        if (amountPaid > currentCredit) amountPaid = currentCredit;
+        if (amountPaid > currentCredit)
+            amountPaid = currentCredit;
 
         command.setTotalCredit(currentCredit - amountPaid);
         command.setTotalAmount(currentAmount + amountPaid);
-        command.setPaymentMethod(newPaymentMethod); 
+        command.setPaymentMethod(newPaymentMethod);
         command.setLastUpdated(LocalDateTime.now());
 
         if (command.getTotalCredit() <= 0) {
@@ -177,7 +182,8 @@ public Command createCommand(CommandDto commandDto) {
     // --- STATISTIQUES & SYNCHRO ---
 
     public List<Command> getCommandsUpdates(String codeStructure, LocalDateTime lastSync) {
-        if (lastSync == null) return commandRepo.findByCodeStructure(codeStructure);
+        if (lastSync == null)
+            return commandRepo.findByCodeStructure(codeStructure);
         return commandRepo.findByCodeStructureAndLastUpdatedAfter(codeStructure, lastSync);
     }
 
@@ -185,10 +191,10 @@ public Command createCommand(CommandDto commandDto) {
         LocalDate localDate = date.toLocalDate();
         LocalDateTime startOfDay = localDate.atStartOfDay();
         LocalDateTime endOfDay = localDate.atTime(23, 59, 59);
-        
+
         Double sum1 = commandRepo.sumCommandesByDate(startOfDay, endOfDay, code);
         Double sum2 = commandRepo.sumTotalCreditByDate(startOfDay, endOfDay, code);
-        
+
         return (sum1 != null ? sum1 : 0.0) + (sum2 != null ? sum2 : 0.0);
     }
 
@@ -205,15 +211,44 @@ public Command createCommand(CommandDto commandDto) {
         return stats;
     }
 
+    // ... dans votre Service
+    public List<UserSalesDto> getSalesByUserForStructure(String codeStructure) {
+        return commandRepo.getSalesGroupedByUser(codeStructure);
+    }
+
     private void updateStockAndCheckAlert(String productName, double quantitySold, String codeStructure) {
         productRepo.findByProductNameAndCodeStructureAndDeletedFalse(productName, codeStructure).ifPresent(product -> {
             product.setProductQte(product.getProductQte() - quantitySold);
             product.setLastUpdated(LocalDateTime.now());
-            
+
             if (product.getProductQte() <= (product.getStockAlert() != null ? product.getStockAlert() : 0.0)) {
-                emailService.sendStockAlertEmail("bayala.m.olivier@gmail.com", product.getProductName(), product.getProductQte(), product.getStockAlert());
+                emailService.sendStockAlertEmail("bayala.m.olivier@gmail.com", product.getProductName(),
+                        product.getProductQte(), product.getStockAlert());
             }
             productRepo.save(product);
         });
+    }
+
+    public Map<String, Double> getDailySalesForMonth(String codeStructure, String yearMonth) {
+        Map<String, Double> salesMap = new HashMap<>();
+
+        // Initialiser la map avec des valeurs à 0.0 pour un affichage propre
+        // (facultatif)
+        for (int i = 1; i <= 31; i++) {
+            String day = String.format("%02d", i);
+            salesMap.put(day, 0.0);
+        }
+
+        // Récupérer les données de la base
+        List<Object[]> results = commandRepo.findDailySalesForMonth(codeStructure, yearMonth);
+
+        // Remplir la map avec les vrais chiffres
+        for (Object[] row : results) {
+            String day = (String) row[0];
+            Double total = ((Number) row[1]).doubleValue();
+            salesMap.put(day, total);
+        }
+
+        return salesMap;
     }
 }

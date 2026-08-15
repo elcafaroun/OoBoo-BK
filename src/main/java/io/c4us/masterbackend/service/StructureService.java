@@ -82,12 +82,8 @@ public class StructureService {
         userStructure.setRoleInStructure("PROPRIETAIRE"); // Rôle par défaut
         userStructure.setDeleted(false);
         userStructure.setUpdatedAt(today);
-
-        // Au lieu de save, on utilise persist si l'id est généré par @UuidGenerator
         userStructureRepo.save(userStructure);
 
-        // Force la synchronisation de la transaction pour éviter le conflit
-        // Hibernate verra l'insertion comme une seule unité de travail
         return savedStructure;
     }
 
@@ -194,4 +190,73 @@ public class StructureService {
         structure.setLastUpdated(now);
         return structureRepo.save(structure);
     }
+
+     public Structure updateActiveStatus(String id, boolean newStatus) {
+        Structure strcut = getStructure(id);
+        strcut.setActive(newStatus);
+        strcut.setLastUpdated(LocalDateTime.now());
+        return structureRepo.save(strcut);
+    }
+
+
+    public Structure updateStructureFields(String id, Structure newDetails) {
+        log.info("Mise à jour des informations de la structure ID: {}", id);
+
+        // 1. Récupération de la structure existante
+        Structure existingStructure = getStructure(id);
+
+        // 2. Mise à jour uniquement des champs éditables
+        if (newDetails.getNomStructure() != null) {
+            existingStructure.setNomStructure(newDetails.getNomStructure().trim());
+        }
+        if (newDetails.getTypeStructure() != null) {
+            existingStructure.setTypeStructure(newDetails.getTypeStructure());
+        }
+        if (newDetails.getDescriptionStructure() != null) {
+            existingStructure.setDescriptionStructure(newDetails.getDescriptionStructure().trim());
+        }
+        if (newDetails.getDisponibiliteStructure() != null) {
+            existingStructure.setDisponibiliteStructure(newDetails.getDisponibiliteStructure().trim());
+        }
+        if (newDetails.getPaysStructure() != null) {
+            existingStructure.setPaysStructure(newDetails.getPaysStructure().trim());
+        }
+        if (newDetails.getVilleStructure() != null) {
+            existingStructure.setVilleStructure(newDetails.getVilleStructure());
+        }
+        if (newDetails.getRueStructure() != null) {
+            existingStructure.setRueStructure(newDetails.getRueStructure().trim());
+        }
+        if (newDetails.getCodePoste() != null) {
+            existingStructure.setCodePoste(newDetails.getCodePoste().trim());
+        }
+        if (newDetails.getGeoLocStructure() != null) {
+            existingStructure.setGeoLocStructure(newDetails.getGeoLocStructure().trim());
+        }
+        existingStructure.setLastUpdated(LocalDateTime.now());
+
+        return structureRepo.save(existingStructure);
+    }
+
+    /**
+     * 🔹 Mise à jour combinée : Informations textuelles + Photo (si présente)
+     */
+    public Structure updateStructureAndPhoto(String id, Structure newDetails, MultipartFile file) {
+        log.info("Mise à jour combinée (Texte + Image) pour la structure ID: {}", id);
+
+        // 1. Mise à jour des champs textuels
+        Structure updatedStructure = updateStructureFields(id, newDetails);
+
+        // 2. Traitement de la photo si un fichier est envoyé
+        if (file != null && !file.isEmpty()) {
+            log.info("Fichier image valide détecté, écriture sur le disque...");
+            String photoUrl = photoFunction.apply(id, file);
+            updatedStructure.setStructPhotoUrl(photoUrl);
+            updatedStructure.setLastUpdated(LocalDateTime.now());
+            updatedStructure = structureRepo.save(updatedStructure);
+        }
+
+        return updatedStructure;
+    }
+
 }

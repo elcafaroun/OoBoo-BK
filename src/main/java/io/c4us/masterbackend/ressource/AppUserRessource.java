@@ -220,4 +220,19 @@ public ResponseEntity<List<AppUserDTO>> getUsersByStructure(@PathVariable String
 public List<UserStructure> getUserStructures(@PathVariable String userId) {
     return appUserService.getUserStructuresByUserId(userId);
 }
+@PostMapping("/{userId}/update-sync-date")
+    public ResponseEntity<String> updateSyncDate(@PathVariable String userId) {
+        appUserService.updateLastSyncDate(userId);
+        return ResponseEntity.ok("Date de synchronisation mise à jour avec succès.");
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<AppUser> getUserById(@PathVariable String id) {
+        try {
+            AppUser user = appUserService.getAppUser(id);
+            return ResponseEntity.ok(user);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
 }
