@@ -20,7 +20,11 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import io.c4us.masterbackend.domain.Product;
+import io.c4us.masterbackend.domain.Structure;
+import io.c4us.masterbackend.DTOs.ProductScanResponse;
+import io.c4us.masterbackend.DTOs.StockEntryRequest;
 import io.c4us.masterbackend.repo.ProductRepo;
+import io.c4us.masterbackend.repo.StructureRepo;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ProductService {
 
     private final ProductRepo productRepo;
+    private final StructureRepo structureRepo;
 
     // --- LOGIQUE DE SYNCHRONISATION (OFFLINE) ---
 
@@ -45,18 +50,80 @@ public class ProductService {
         return productRepo.findByCodeStructureAndLastUpdatedAfter(codeStructure, lastSync);
     }
 
+    // --- SCAN ET GESTION PAR QR CODE ---
+
+    /**
+     * Vérifie si un produit existe déjà via son QR Code au sein d'une structure donnée.
+     */
+    public io.c4us.masterbackend.DTOs.ProductScanResponse checkProductByQrCode(String qrCode, String codeStructure) {
+        Optional<Product> productOpt = productRepo.findByProductQrCodeAndCodeStructureAndDeletedFalse(qrCode, codeStructure);
+
+        if (productOpt.isPresent()) {
+            return new ProductScanResponse(true, "Le produit existe déjà dans la base.", productOpt.get());
+        } else {
+            return new ProductScanResponse(false, "Produit non trouvé.", null);
+        }
+    }
+
+    /**
+     * Ajoute directement la quantité spécifiée au stock actuel du produit scanné.
+     */
+    @Transactional
+    public Product addStockByQrCode(StockEntryRequest request) {
+        if (request.getQuantity() == null || request.getQuantity() <= 0) {
+            throw new IllegalArgumentException("La quantité à ajouter doit être supérieure à 0.");
+        }
+
+        Product product = productRepo.findByProductQrCodeAndCodeStructureAndDeletedFalse(
+                request.getProductQrCode(), request.getCodeStructure()
+        ).orElseThrow(() -> new RuntimeException("Produit introuvable avec le code QR : " + request.getProductQrCode()));
+
+        double currentStock = product.getProductQte() != null ? product.getProductQte() : 0.0;
+        product.setProductQte(currentStock + request.getQuantity());
+        
+        // Signalement de la modification pour la synchronisation mobile
+        product.setLastUpdated(LocalDateTime.now());
+
+        log.info("Entrée en stock effectuée pour le produit ID: {}. Ancien stock: {}, Ajout: {}, Nouveau stock: {}", 
+                product.getId(), currentStock, request.getQuantity(), product.getProductQte());
+
+        return productRepo.save(product);
+    }
+
     // --- CRUD ADAPTÉ ---
 
     public Product createProduct(Product product) {
+        String codeStructure = product.getCodeStructure();
+        String categoryId = product.getCategoryId();
+
+        // Récupération de la structure
+        Structure structure = structureRepo.findById(codeStructure)
+                .orElseThrow(() -> new RuntimeException("Structure introuvable avec le code : " + codeStructure));
+
+        // Récupération du quota de produits pour cette structure
+        Integer maxAllowed = structure.getNombreProdParBusiness();
+
+        // Vérification du quota si défini
+        if (maxAllowed != null) {
+            long currentCount = productRepo.countByCategoryIdAndCodeStructureAndDeletedFalse(categoryId, codeStructure);
+            if (currentCount >= maxAllowed) {
+                log.warn("Quota de produits atteint pour la structure {} dans la catégorie {}. Nombre actuel : {}, Limite autorisée : {}",
+                        codeStructure, categoryId, currentCount, maxAllowed);
+                throw new IllegalStateException(
+                        "Limite atteinte : Votre abonnement vous autorise un maximum de " + maxAllowed
+                                + " produit(s) par catégorie.");
+            }
+        }
+
         product.setLastUpdated(LocalDateTime.now());
-        System.out.println("Code QR reçu : " + product.getProductQrCode()); // Regardez ce qui s'affiche ici
+        log.info("Code QR reçu lors de la création : {}", product.getProductQrCode());
         product.setDeleted(false);
         return productRepo.save(product);
     }
 
     public Product updateProduct(String id, Product updatedProduct) {
         Product existing = getProduct(id);
-        
+
         existing.setProductName(updatedProduct.getProductName());
         existing.setProductPrice(updatedProduct.getProductPrice());
         existing.setProductQte(updatedProduct.getProductQte());
@@ -64,15 +131,16 @@ public class ProductService {
         existing.setPrixAchat(updatedProduct.getPrixAchat());
         existing.setStockAlert(updatedProduct.getStockAlert());
         existing.setFavoris(updatedProduct.isFavoris());
+        existing.setProductQrCode(updatedProduct.getProductQrCode());
 
-        // Crucial : Marquer la modification pour la synchro
+        // Signalement de la modification pour la synchro
         existing.setLastUpdated(LocalDateTime.now());
         return productRepo.save(existing);
     }
 
     public Product delProduct(String id) {
         Product product = getProduct(id);
-        // Soft Delete pour que le mobile sache qu'il doit le supprimer localement
+        // Soft Delete pour synchro mobile
         product.setDeleted(true);
         product.setLastUpdated(LocalDateTime.now());
         return productRepo.save(product);
@@ -83,14 +151,10 @@ public class ProductService {
     @Transactional
     public void updateStock(String productId, double deductQuantity) {
         Product product = getProduct(productId);
-        
-        // Mise à jour de la quantité
+
         product.setProductQte(product.getProductQte() - deductQuantity);
-        
-        // On marque la mise à jour pour que les autres terminaux mobiles 
-        // récupèrent le nouveau stock lors de leur prochaine synchro
         product.setLastUpdated(LocalDateTime.now());
-        
+
         productRepo.save(product);
     }
 
@@ -120,7 +184,7 @@ public class ProductService {
     // --- GESTION DES PHOTOS ---
 
     public String uploadPhoto(String id, MultipartFile file) {
-        log.info("Upload photo for product : {}", id);
+        log.info("Upload photo pour le produit : {}", id);
         Product product = getProduct(id);
         String photoUrl = photoFunction.apply(id, file);
         product.setProductPhotoUrl(photoUrl);
@@ -148,7 +212,6 @@ public class ProductService {
         }
     };
 
-
     public Product updateActiveStatus(String id, boolean newStatus) {
         Product product = getProduct(id);
         product.setActive(newStatus);
@@ -158,7 +221,10 @@ public class ProductService {
 
     public boolean checkIfExists(String name, String categoryId, String codeStructure) {
         return productRepo.existsByProductNameIgnoreCaseAndCategoryIdAndCodeStructure(
-            name, categoryId, codeStructure
-        );
+                name, categoryId, codeStructure);
+    }
+
+    public long countProductsByStructure(String codeStructure) {
+        return productRepo.countByCodeStructureAndDeletedFalse(codeStructure);
     }
 }

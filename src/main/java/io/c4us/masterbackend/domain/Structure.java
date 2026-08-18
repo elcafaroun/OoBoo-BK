@@ -35,6 +35,8 @@ public class Structure implements Serializable {
     private String geoLocStructure;
     private String descriptionStructure;
     private String codeStructure;
+
+    // Identifiant/Nom du plan souscrit
     private String planStructure;
     private LocalDateTime startSub;
     private LocalDateTime endSub;
@@ -43,8 +45,45 @@ public class Structure implements Serializable {
     private double cout;
     private Long priorite;
 
+    // --- SNAPSHOT DES RÈGLES DU PLAN ---
+    @Column(name = "sms_alerte")
+    private Boolean smsAlerte;
+
+    @Column(name = "stock_alerte")
+    private Boolean stockAlerte;
+
+    @Column(name = "email_alerte")
+    private Boolean emailAlerte;
+
+    @Column(name = "ia_active")
+    private Boolean iaActive;
+
+    @Column(name = "dashboard")
+    private Boolean dashboard;
+
+    @Column(name = "mini_dashboard")
+    private Boolean miniDashboard;
+
+    @Column(name = "nombre_users")
+    private Boolean nombreUsers;
+
+    @Column(name = "loyalty_access")
+    private Boolean loyaltyAccess;
+
+    @Column(name = "grace_periode")
+    private Integer gracePeriode;
+
+    @Column(name = "nombre_jour_souscription")
+    private Integer nombreJourSouscription;
+
+    @Column(name = "nombre_categorie_par_business")
+    private Integer nombreCategorieParBusiness;
+
+    @Column(name = "nombre_prod_par_business")
+    private Integer nombreProdParBusiness;
+
     @Version
-    private Long version; 
+    private Long version;
 
     // --- OFFLINE & SYNCHRONISATION ---
     @Column(name = "created_at", updatable = false)
@@ -55,7 +94,6 @@ public class Structure implements Serializable {
 
     private boolean deleted = false;
 
-    // Relation vers la table d'association
     @OneToMany(mappedBy = "structure", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserStructure> users = new HashSet<>();
 

@@ -20,12 +20,11 @@ public interface ProductRepo extends JpaRepository<Product, String> {
     // Utile pour éviter les doublons lors de l'ajout
     Optional<Product> findByProductNameAndCodeStructureAndDeletedFalse(String productName, String codeStructure);
 
-boolean existsByProductNameIgnoreCaseAndCategoryIdAndCodeStructure(
-        String productName, 
-        String categoryId, 
-        String codeStructure
-    );
-    
+    boolean existsByProductNameIgnoreCaseAndCategoryIdAndCodeStructure(
+            String productName,
+            String categoryId,
+            String codeStructure);
+
     List<Product> findByCodeStructureAndDeletedFalse(String codeStructure);
 
     List<Product> findByCategoryIdAndDeletedFalse(String idCat);
@@ -33,7 +32,7 @@ boolean existsByProductNameIgnoreCaseAndCategoryIdAndCodeStructure(
     long countByCategoryIdAndDeletedFalse(String categoryId);
 
     @Query("SELECT p FROM Product p WHERE p.productQte <= p.stockAlert AND p.deleted = false AND p.codeStructure = :codeStructure")
-List<Product> findByLowStockAndStructure(@Param("codeStructure") String codeStructure);
+    List<Product> findByLowStockAndStructure(@Param("codeStructure") String codeStructure);
     // --- LOGIQUE DE SYNCHRONISATION OFFLINE ---
 
     /**
@@ -56,5 +55,14 @@ List<Product> findByLowStockAndStructure(@Param("codeStructure") String codeStru
             @Param("name") String name,
             @Param("code") String code);
 
-            long countByCategoryId(String categoryId);
+    long countByCategoryId(String categoryId);
+
+    @Query("SELECT COUNT(p) FROM Product p WHERE p.codeStructure = :codeStructure AND p.deleted = false AND p.isActive = true")
+    long countActiveProductsByStructure(@Param("codeStructure") String codeStructure);
+
+    long countByCodeStructureAndDeletedFalse(String codeStructure);
+
+    long countByCategoryIdAndCodeStructureAndDeletedFalse(String categoryId, String codeStructure);
+
+    Optional<Product> findByProductQrCodeAndCodeStructureAndDeletedFalse(String productQrCode, String codeStructure);
 }

@@ -47,6 +47,14 @@ spring:
     async:
       request-timeout: 3600000
 
+# Configuration des Logs (Capture et affichage des erreurs de désérialisation JSON / HTTP 400)
+logging:
+  level:
+    org.springframework.web: DEBUG
+    org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor: TRACE
+    org.springframework.web.bind.MissingServletRequestParameterException: TRACE
+    org.springframework.http.converter.HttpMessageNotReadableException: TRACE
+
 # Configuration Serveur
 server:
   address: 0.0.0.0
@@ -58,7 +66,6 @@ management:
     web:
       exposure:
         include: "*"
-  # 👇 AJOUT : Désactive la vérification automatique du Mail par l'Actuator
   health:
     mail:
       enabled: false

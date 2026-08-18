@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import io.c4us.masterbackend.domain.Category;
+import io.c4us.masterbackend.domain.Structure;
 
 
 public interface CategoryRepo extends JpaRepository<io.c4us.masterbackend.domain.Category, String> {
@@ -24,6 +25,11 @@ public interface CategoryRepo extends JpaRepository<io.c4us.masterbackend.domain
 
     // Optionnel : Synchro globale pour plusieurs structures (si l'utilisateur en gère plusieurs)
     List<Category> findByCodeStructureInAndLastUpdatedAfter(List<String> codeStructures, LocalDateTime lastSync);
+
+    long countByCodeStructureAndDeletedFalse(String codeStructure);
+    
+Optional<Structure> findFirstByCodeStructure(String codeStructure);
+    
 
 
 }

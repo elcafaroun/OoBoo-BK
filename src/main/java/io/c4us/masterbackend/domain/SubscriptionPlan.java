@@ -17,7 +17,7 @@ public class SubscriptionPlan {
     private Long id;
 
     @Column(unique = true, nullable = false)
-    private String name; 
+    private String name;
 
     private String price;
     private String colorHex;
@@ -32,10 +32,16 @@ public class SubscriptionPlan {
     @Column(name = "sms_alerte")
     private Boolean smsAlerte;
 
+    @Column(name = "stock_alerte")
+    private Boolean stockAlerte;
+
     @Column(name = "nombre_business")
     private Integer nombreBusiness;
 
     private Double cout;
+
+    @Column(name = "grace_periode")
+    private Integer gracePeriode;
 
     @Column(name = "nombre_jour_souscription")
     private Integer nombreJourSouscription;
@@ -56,4 +62,10 @@ public class SubscriptionPlan {
 
     @Column(name = "nombre_prod_par_business")
     private Integer nombreProdParBusiness;
+
+     @Column(name = "ia_active")
+    private Boolean iaActive;
+
+    @Column(name = "mini_dashboard")
+    private Boolean miniDashboard;
 }

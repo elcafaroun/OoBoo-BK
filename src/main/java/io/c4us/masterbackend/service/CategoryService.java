@@ -20,8 +20,10 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import io.c4us.masterbackend.domain.Category;
+import io.c4us.masterbackend.domain.Structure;
 import io.c4us.masterbackend.repo.CategoryRepo;
 import io.c4us.masterbackend.repo.ProductRepo;
+import io.c4us.masterbackend.repo.StructureRepo;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +36,7 @@ public class CategoryService {
 
     private final CategoryRepo categoryRepo;
     private final ProductRepo productRepo;
+    private final StructureRepo structureRepo; // 1. Injection du repository Structure
 
     // --- LOGIQUE DE SYNCHRONISATION (OFFLINE) ---
 
@@ -50,6 +53,27 @@ public class CategoryService {
     // --- CRUD ADAPTÉ ---
 
     public Category createCategory(Category category) {
+        String codeStructure = category.getCodeStructure();
+
+        // 2. Récupérer la structure et son quota depuis 'nombreCategorieParBusiness'
+        Structure structure = structureRepo.findById(category.getCodeStructure())
+    .orElseThrow(() -> new RuntimeException("Structure introuvable avec l'ID : " + category.getCodeStructure()));
+
+        Integer maxAllowed = structure.getNombreCategorieParBusiness();
+
+        // 3. Vérifier et appliquer la limite si un quota est défini (non null)
+        if (maxAllowed != null) {
+            long currentCount = categoryRepo.countByCodeStructureAndDeletedFalse(codeStructure);
+
+            if (currentCount >= maxAllowed) {
+                log.warn("Quota atteint pour la structure {}. Nombre actuel : {}, Limite autorisée : {}",
+                        codeStructure, currentCount, maxAllowed);
+                throw new IllegalStateException(
+                        "Limite atteinte : Votre abonnement vous autorise un maximum de " + maxAllowed
+                                + " catégorie(s).");
+            }
+        }
+
         category.setLastUpdated(LocalDateTime.now());
         category.setDeleted(false);
         return categoryRepo.save(category);
@@ -103,7 +127,9 @@ public class CategoryService {
         return categoryRepo.findAll(PageRequest.of(page, size, Sort.by("createdDate")));
     }
 
-
+    public long countCategoriesByStructure(String codeStructure) {
+        return categoryRepo.countByCodeStructureAndDeletedFalse(codeStructure);
+    }
 
     // --- GESTION DES PHOTOS ---
 

@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.c4us.masterbackend.DTOs.CategoryStatusUpdateDTO;
+import io.c4us.masterbackend.DTOs.StructureResponseDTO;
 import io.c4us.masterbackend.DTOs.StructureStatusUpdateDTO;
 import io.c4us.masterbackend.domain.Structure;
 import io.c4us.masterbackend.service.StructureService;
@@ -99,10 +100,7 @@ public class StructureRessource {
         return ResponseEntity.ok().body(structureService.delStructure(id));
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<Structure> getStructureById(@PathVariable String id) {
-        return ResponseEntity.ok(structureService.getStructure(id));
-    }
+ 
 
     @PutMapping("/update-plan")
     public ResponseEntity<Structure> updateStructurePlan(
@@ -170,5 +168,9 @@ public class StructureRessource {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erreur serveur : " + e.getMessage());
         }
     }
- 
+ @GetMapping("/{id}") // {id} est défini uniquement ici
+    public ResponseEntity<StructureResponseDTO> getStructureById(@PathVariable("id") String id) {
+        StructureResponseDTO response = structureService.getStructureById(id);
+        return ResponseEntity.ok(response);
+    }
 }

@@ -19,16 +19,43 @@ import static io.c4us.masterbackend.constant.Constant.PHOTO_DIRECTORY;
 
 import io.c4us.masterbackend.DTOs.CategoryStatusUpdateDTO;
 import io.c4us.masterbackend.domain.Product;
+import io.c4us.masterbackend.DTOs.ProductScanResponse;
+import io.c4us.masterbackend.DTOs.StockEntryRequest;
 import io.c4us.masterbackend.service.ProductService;
 import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/product")
 @RequiredArgsConstructor
-//@CrossOrigin(origins = "*") // À adapter selon vos besoins
+// @CrossOrigin(origins = "*") // À adapter selon vos besoins
 public class ProductRessource {
 
     private final ProductService productService;
+
+    /**
+     * VÉRIFICATION PAR SCAN QR CODE
+     * Vérifie si un code QR existe déjà pour la structure donnée.
+     */
+    @GetMapping("/scan-check")
+    public ResponseEntity<ProductScanResponse> checkQrCode(
+            @RequestParam String qrCode,
+            @RequestParam String codeStructure) {
+        return ResponseEntity.ok(productService.checkProductByQrCode(qrCode, codeStructure));
+    }
+
+    /**
+     * ENTRÉE RAPIDE EN STOCK PAR QR CODE
+     * Ajoute une quantité spécifique au stock d'un produit déjà enregistré.
+     */
+    @PostMapping("/stock-entry")
+    public ResponseEntity<?> addStockByQrCode(@RequestBody StockEntryRequest request) {
+        try {
+            Product updatedProduct = productService.addStockByQrCode(request);
+            return ResponseEntity.ok(updatedProduct);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 
     /**
      * ENDPOINT DE SYNCHRONISATION (Crucial pour Flutter)
@@ -37,25 +64,21 @@ public class ProductRessource {
     @GetMapping("/sync/{codeStructure}")
     public ResponseEntity<List<Product>> syncProducts(
             @PathVariable String codeStructure,
-            @RequestParam(value = "lastSync", required = false) 
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime lastSync) {
-        
+            @RequestParam(value = "lastSync", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime lastSync) {
+
         return ResponseEntity.ok(productService.getProductsUpdates(codeStructure, lastSync));
     }
 
- @PostMapping
-public ResponseEntity<?> createProduct(@RequestBody Product product) {
-    try {
-        Product created = productService.createProduct(product);
-        return ResponseEntity.created(URI.create("/product/" + created.getId())).body(created);
-    } catch (Exception e) {
-        // AJOUTEZ CETTE LIGNE : C'est crucial pour voir l'erreur dans la console
-        e.printStackTrace(); 
-        
-        // Optionnel : renvoyer le message d'erreur au client Flutter
-        return ResponseEntity.badRequest().body("Erreur : " + e.getMessage());
+    @PostMapping
+    public ResponseEntity<?> createProduct(@RequestBody Product product) {
+        try {
+            Product created = productService.createProduct(product);
+            return ResponseEntity.created(URI.create("/product/" + created.getId())).body(created);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erreur : " + e.getMessage());
+        }
     }
-}
 
     @PutMapping("/{id}")
     public ResponseEntity<Product> updateProduct(@PathVariable String id, @RequestBody Product product) {
@@ -80,7 +103,7 @@ public ResponseEntity<?> createProduct(@RequestBody Product product) {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Product> delProduct(@PathVariable(value = "id") String id) {
-        // Le service effectue maintenant un Soft Delete
+        // Le service effectue un Soft Delete
         return ResponseEntity.ok().body(productService.delProduct(id));
     }
 
@@ -103,7 +126,6 @@ public ResponseEntity<?> createProduct(@RequestBody Product product) {
     public ResponseEntity<?> updateStock(@RequestBody Map<String, Object> request) {
         try {
             String productId = (String) request.get("productId");
-            // Utilisation de Number pour supporter Integer ou Double venant du JSON
             double deductQuantity = Double.parseDouble(request.get("deductQuantity").toString());
 
             productService.updateStock(productId, deductQuantity);
@@ -137,10 +159,14 @@ public ResponseEntity<?> createProduct(@RequestBody Product product) {
             @RequestParam String name,
             @RequestParam String categoryId,
             @RequestParam String codeStructure) {
-        
+
         boolean exists = productService.checkIfExists(name, categoryId, codeStructure);
         return ResponseEntity.ok(exists);
     }
 
-    
+    @GetMapping("/count/structure/{codeStructure}")
+    public ResponseEntity<Long> countProductsByStructure(@PathVariable String codeStructure) {
+        long count = productService.countProductsByStructure(codeStructure);
+        return ResponseEntity.ok(count);
+    }
 }

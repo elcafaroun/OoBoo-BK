@@ -41,14 +41,16 @@ public class CategoryRessource {
         return ResponseEntity.ok(categoryService.getCategoriesUpdates(codeStructure, lastSync));
     }
 
-    @PostMapping
-    public ResponseEntity<Category> createCategory(@RequestBody Category category) {
+@PostMapping
+    public ResponseEntity<?> createCategory(@RequestBody Category category) {
         try {
             Category created = categoryService.createCategory(category);
             return ResponseEntity.created(URI.create("/category/" + created.getId()))
                     .body(created);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+            e.printStackTrace(); // Log l'erreur complète dans les logs du serveur
+            // Renvoie le message d'erreur exact (ex: "Limite atteinte...") au lieu d'un 400 vide
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
@@ -137,4 +139,11 @@ public ResponseEntity<byte[]> getPhoto(@PathVariable("filename") String filename
             .contentType(mediaType) // Ici on utilise un objet MediaType valide, pas de wildcard
             .body(image);
 }
+
+@GetMapping("/count/structure/{codeStructure}")
+    public ResponseEntity<Long> countCategoriesByStructure(@PathVariable String codeStructure) {
+        long count = categoryService.countCategoriesByStructure(codeStructure);
+        return ResponseEntity.ok(count);
+    }
+
 }

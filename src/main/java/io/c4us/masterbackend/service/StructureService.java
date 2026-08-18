@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import io.c4us.masterbackend.domain.Structure;
+import io.c4us.masterbackend.DTOs.StructureResponseDTO;
 import io.c4us.masterbackend.domain.AppUser;
 import io.c4us.masterbackend.domain.SubscriptionPlan;
 import io.c4us.masterbackend.domain.UserStructure;
@@ -25,6 +26,7 @@ import io.c4us.masterbackend.repo.StructureRepo;
 import io.c4us.masterbackend.repo.AppUserRepo;
 import io.c4us.masterbackend.repo.SubscriptionPlanRepo;
 import io.c4us.masterbackend.repo.UserStructureRepo;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,30 +43,50 @@ public class StructureService {
     private final UserStructureRepo userStructureRepo;
 
     /**
-     * 🔹 Création d'une structure ET liaison automatique dans la table
-     * user_structures
+     * 🔹 Méthode privée réutilisable pour copier l'intégralité des attributs du Plan vers la Structure
      */
+    private void copyPlanFeaturesToStructure(Structure struct, SubscriptionPlan plan) {
+        struct.setPlanStructure(plan.getName());
+        struct.setCout(plan.getCout() != null ? plan.getCout() : 0.0);
+        struct.setPriorite(plan.getPriorite());
+
+        // Copie des fonctionnalités et drapeaux d'accès
+        struct.setSmsAlerte(plan.getSmsAlerte());
+        struct.setStockAlerte(plan.getStockAlerte());
+        struct.setEmailAlerte(plan.getEmailAlerte());
+        struct.setDashboard(plan.getDashboard());
+        struct.setLoyaltyAccess(plan.getLoyaltyAccess());
+struct.setIaActive(plan.getIaActive());
+    struct.setMiniDashboard(plan.getMiniDashboard());
+        // Copie des quotas et durées
+        struct.setGracePeriode(plan.getGracePeriode());
+        struct.setNombreJourSouscription(plan.getNombreJourSouscription());
+        struct.setNombreCategorieParBusiness(plan.getNombreCategorieParBusiness());
+        struct.setNombreProdParBusiness(plan.getNombreProdParBusiness());
+    }
+
     /**
-     * 🔹 Création d'une structure ET liaison sécurisée
+     * 🔹 Création d'une structure ET copie des règles du plan souscrit
      */
     public Structure createStructure(Structure struct, String userId) {
         log.info("Création d'une nouvelle structure pour l'utilisateur ID: {}", userId);
 
-        // 1. Récupération des entités gérées par l'EntityManager
         AppUser creator = appUserRepo.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Utilisateur introuvable (ID: " + userId + ")"));
 
         SubscriptionPlan plan = planRepository.findByName(struct.getPlanStructure())
                 .orElseThrow(() -> new RuntimeException("Plan introuvable : " + struct.getPlanStructure()));
 
-        // 2. Initialisation des données
         LocalDateTime today = LocalDateTime.now();
+
+        // 1. Définition des dates de souscription
         struct.setStartSub(today);
-        struct.setEndSub(
-                today.plusDays(plan.getNombreJourSouscription() != null ? plan.getNombreJourSouscription() : 0));
-        struct.setCout(plan.getCout() != null ? plan.getCout() : 0);
-        struct.setPriorite(plan.getPriorite());
+        int days = plan.getNombreJourSouscription() != null ? plan.getNombreJourSouscription() : 0;
+        struct.setEndSub(today.plusDays(days));
         struct.setLastUpdated(today);
+
+        // 2. Copie de l'intégralité des paramètres et limites du plan
+        copyPlanFeaturesToStructure(struct, plan);
 
         // 3. Génération du matricule
         long nextSequence = structureRepo.count() + 1;
@@ -73,13 +95,11 @@ public class StructureService {
         // 4. Sauvegarde de la structure
         Structure savedStructure = structureRepo.save(struct);
 
-        // 5. Gestion de la table pivot (UserStructure)
-        // IMPORTANT : On instancie l'entité de liaison sans forcer l'ID manuellement
-        // si @UuidGenerator est configuré sur l'entité UserStructure
+        // 5. Gestion de la liaison pivot (UserStructure)
         UserStructure userStructure = new UserStructure();
         userStructure.setUser(creator);
         userStructure.setStructure(savedStructure);
-        userStructure.setRoleInStructure("PROPRIETAIRE"); // Rôle par défaut
+        userStructure.setRoleInStructure("PROPRIETAIRE");
         userStructure.setDeleted(false);
         userStructure.setUpdatedAt(today);
         userStructureRepo.save(userStructure);
@@ -88,8 +108,34 @@ public class StructureService {
     }
 
     /**
-     * 🔹 Récupération des structures associées à un utilisateur (Multi-structure
-     * PB-M)
+     * 🔹 Mise à jour ou changement de Plan de souscription
+     */
+    public Structure updateStructurePlan(String id, String planName) {
+        Structure structure = getStructure(id);
+        SubscriptionPlan plan = planRepository.findByName(planName)
+                .orElseThrow(() -> new RuntimeException("Plan de souscription introuvable : " + planName));
+
+        // 1. Copie des nouvelles règles et options du plan
+        copyPlanFeaturesToStructure(structure, plan);
+
+        // 2. Recalcul des dates d'abonnement
+        LocalDateTime now = LocalDateTime.now();
+        Integer duration = plan.getNombreJourSouscription() != null ? plan.getNombreJourSouscription() : 0;
+        LocalDateTime currentEndSub = structure.getEndSub();
+
+        if (currentEndSub != null && currentEndSub.isAfter(now)) {
+            structure.setEndSub(currentEndSub.plusDays(duration));
+        } else {
+            structure.setStartSub(now);
+            structure.setEndSub(now.plusDays(duration));
+        }
+
+        structure.setLastUpdated(now);
+        return structureRepo.save(structure);
+    }
+
+    /**
+     * 🔹 Récupération des structures associées à un utilisateur
      */
     public List<Structure> getStructuresByUser(String userId) {
         log.info("Récupération optimisée des structures pour le user : {}", userId);
@@ -103,8 +149,7 @@ public class StructureService {
     }
 
     /**
-     * 🔹 Méthode de synchronisation incrémentale optimisée pour le Offline de
-     * Flutter
+     * 🔹 Méthode de synchronisation incrémentale pour le mode Offline Flutter
      */
     public List<Structure> getUpdatesForSync(String userId, LocalDateTime lastSyncDate) {
         List<Structure> userStructures = getStructuresByUser(userId);
@@ -116,7 +161,6 @@ public class StructureService {
                 .collect(Collectors.toList());
     }
 
-    // Suppression logique (Soft Delete)
     public Structure delStructure(String id) {
         Structure structure = getStructure(id);
         structure.setDeleted(true);
@@ -129,7 +173,6 @@ public class StructureService {
                 .orElseThrow(() -> new RuntimeException("Structure non trouvée avec l'Id : " + id));
     }
 
-    // Gestion de l'upload des logos/photos
     public String uploadPhoto(String id, MultipartFile file) {
         log.info("Upload photo pour la structure : {}", id);
         Structure struct = getStructure(id);
@@ -167,45 +210,18 @@ public class StructureService {
         return structureRepo.existsByNomStructureIgnoreCase(nom.trim());
     }
 
-    public Structure updateStructurePlan(String id, String planName) {
-        Structure structure = getStructure(id);
-        SubscriptionPlan plan = planRepository.findByName(planName)
-                .orElseThrow(() -> new RuntimeException("Plan de souscription introuvable : " + planName));
-
-        structure.setPlanStructure(plan.getName());
-        structure.setCout(plan.getCout());
-        structure.setPriorite(plan.getPriorite());
-
-        LocalDateTime now = LocalDateTime.now();
-        Integer duration = plan.getNombreJourSouscription() != null ? plan.getNombreJourSouscription() : 0;
-        LocalDateTime currentEndSub = structure.getEndSub();
-
-        if (currentEndSub != null && currentEndSub.isAfter(now)) {
-            structure.setEndSub(currentEndSub.plusDays(duration));
-        } else {
-            structure.setStartSub(now);
-            structure.setEndSub(now.plusDays(duration));
-        }
-
-        structure.setLastUpdated(now);
-        return structureRepo.save(structure);
+    public Structure updateActiveStatus(String id, boolean newStatus) {
+        Structure struct = getStructure(id);
+        struct.setActive(newStatus);
+        struct.setLastUpdated(LocalDateTime.now());
+        return structureRepo.save(struct);
     }
-
-     public Structure updateActiveStatus(String id, boolean newStatus) {
-        Structure strcut = getStructure(id);
-        strcut.setActive(newStatus);
-        strcut.setLastUpdated(LocalDateTime.now());
-        return structureRepo.save(strcut);
-    }
-
 
     public Structure updateStructureFields(String id, Structure newDetails) {
         log.info("Mise à jour des informations de la structure ID: {}", id);
 
-        // 1. Récupération de la structure existante
         Structure existingStructure = getStructure(id);
 
-        // 2. Mise à jour uniquement des champs éditables
         if (newDetails.getNomStructure() != null) {
             existingStructure.setNomStructure(newDetails.getNomStructure().trim());
         }
@@ -238,16 +254,11 @@ public class StructureService {
         return structureRepo.save(existingStructure);
     }
 
-    /**
-     * 🔹 Mise à jour combinée : Informations textuelles + Photo (si présente)
-     */
     public Structure updateStructureAndPhoto(String id, Structure newDetails, MultipartFile file) {
         log.info("Mise à jour combinée (Texte + Image) pour la structure ID: {}", id);
 
-        // 1. Mise à jour des champs textuels
         Structure updatedStructure = updateStructureFields(id, newDetails);
 
-        // 2. Traitement de la photo si un fichier est envoyé
         if (file != null && !file.isEmpty()) {
             log.info("Fichier image valide détecté, écriture sur le disque...");
             String photoUrl = photoFunction.apply(id, file);
@@ -259,4 +270,53 @@ public class StructureService {
         return updatedStructure;
     }
 
+    @Transactional
+    public StructureResponseDTO getStructureById(String id) {
+        Structure structure = structureRepo.findByIdStructureAndDeletedFalse(id)
+                .orElseThrow(() -> new EntityNotFoundException("Structure non trouvée avec l'ID : " + id));
+
+        return mapToDTO(structure);
+    }
+
+    // Mapping Entity -> DTO
+    private StructureResponseDTO mapToDTO(Structure entity) {
+        return StructureResponseDTO.builder()
+                .idStructure(entity.getIdStructure())
+                .nomStructure(entity.getNomStructure())
+                .phone1Structure(entity.getPhone1Structure())
+                .phone2Structure(entity.getPhone2Structure())
+                .paysStructure(entity.getPaysStructure())
+                .villeStructure(entity.getVilleStructure())
+                .rueStructure(entity.getRueStructure())
+                .codePoste(entity.getCodePoste())
+                .structPhotoUrl(entity.getStructPhotoUrl())
+                .emailStructure(entity.getEmailStructure())
+                .typeStructure(entity.getTypeStructure())
+                .disponibiliteStructure(entity.getDisponibiliteStructure())
+                .geoLocStructure(entity.getGeoLocStructure())
+                .descriptionStructure(entity.getDescriptionStructure())
+                .codeStructure(entity.getCodeStructure())
+                .planStructure(entity.getPlanStructure())
+                .startSub(entity.getStartSub())
+                .endSub(entity.getEndSub())
+                .isActive(entity.isActive())
+                .cout(entity.getCout())
+                .priorite(entity.getPriorite())
+                // Snapshot des règles
+                .smsAlerte(entity.getSmsAlerte())
+                .stockAlerte(entity.getStockAlerte())
+                .emailAlerte(entity.getEmailAlerte())
+                .dashboard(entity.getDashboard())
+                .iaActive(entity.getIaActive())
+            .miniDashboard(entity.getMiniDashboard())
+                .nombreUsers(entity.getNombreUsers())
+                .loyaltyAccess(entity.getLoyaltyAccess())
+                .gracePeriode(entity.getGracePeriode())
+                .nombreJourSouscription(entity.getNombreJourSouscription())
+                .nombreCategorieParBusiness(entity.getNombreCategorieParBusiness())
+                .nombreProdParBusiness(entity.getNombreProdParBusiness())
+                .createdDate(entity.getCreatedDate())
+                .lastUpdated(entity.getLastUpdated())
+                .build();
+    }
 }
