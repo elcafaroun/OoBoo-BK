@@ -13,18 +13,18 @@ import io.c4us.masterbackend.domain.UserStructure;
 @Repository
 public interface UserStructureRepo extends JpaRepository<UserStructure, String> {
 
-    // ❌ INCORRECT : findByUserId (Spring cherche un champ 'userId' inexistant)
    
     List<UserStructure> findByUser_Id(String userId);
 
-    // ❌ INCORRECT : findByUserIdAndStructure_IdStructure
-    // ✅ CORRECT : findByUser_IdAndStructure_IdStructure
+    
     Optional<UserStructure> findByUser_IdAndStructure_IdStructure(String userId, String idStructure);
 
     // ✅ Les autres méthodes sont correctes car elles utilisent bien la syntaxe 'Objet_Champ'
     List<UserStructure> findByStructure_CodeStructureAndDeletedFalse(String codeStructure);
 
     long countByStructure_CodeStructure(String codeStructure);
+
+    long countByStructure_CodeStructureAndDeletedFalse(String codeStructure);
 
     // Cette requête est excellente, elle évite le problème N+1
     @Query("SELECT us FROM UserStructure us JOIN FETCH us.structure WHERE us.user.id = :userId AND us.deleted = false")

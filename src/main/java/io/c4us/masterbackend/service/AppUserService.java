@@ -13,6 +13,7 @@ import io.c4us.masterbackend.DTOs.AppUserDTO;
 import io.c4us.masterbackend.domain.AppUser;
 import io.c4us.masterbackend.domain.Structure;
 import io.c4us.masterbackend.domain.UserStructure;
+import io.c4us.masterbackend.exception.QuotaExceededException;
 import io.c4us.masterbackend.repo.AppUserRepo;
 import io.c4us.masterbackend.repo.StructureRepo;
 import io.c4us.masterbackend.repo.UserStructureRepo;
@@ -34,6 +35,9 @@ public class AppUserService {
     /**
      * Création d'un utilisateur et affectation à sa première structure
      */
+/**
+     * Création d'un utilisateur et affectation à sa première structure
+     */
     public AppUser createAppUser(AppUser user, String codeStructureCible, String roleInitial) {
         // 1. Double sécurité d'unicité
         if (!isEmailUnique(user.getUserEmail())) {
@@ -46,14 +50,26 @@ public class AppUserService {
         boolean isSuperAdmin = "Super admin".equalsIgnoreCase(user.getUserProfile());
         String clearPassword = user.getUserPassword();
 
-        // 2. Chiffrement et Token
-        user.setUserPassword(passwordEncoder.encode(user.getUserPassword()));
-        user.setConfirmationToken(generateAndSetToken(user));
-
         // Validation de la structure obligatoire pour les comptes enfants
         if (!isSuperAdmin && (codeStructureCible == null || codeStructureCible.trim().isEmpty())) {
             throw new RuntimeException("Impossible de créer un profil utilisateur sans l'associer à une structure valide.");
         }
+
+        Structure structureCible = null;
+
+        // 🔹 VERIFICATION DU QUOTA AVANT TOUTE OPERATION HASH / SAVE
+        if (!isSuperAdmin) {
+            structureCible = structureRepo.findByCodeStructure(codeStructureCible.trim().toUpperCase())
+                    .stream().findFirst()
+                    .orElseThrow(() -> new RuntimeException("Structure introuvable avec le code: " + codeStructureCible));
+
+            // Vérification de la limite du quota d'utilisateurs
+            checkUserQuotaForStructure(structureCible);
+        }
+
+        // 2. Chiffrement et Token
+        user.setUserPassword(passwordEncoder.encode(user.getUserPassword()));
+        user.setConfirmationToken(generateAndSetToken(user));
 
         // 3. Génération séquentielle du Code Utilisateur
         if (isSuperAdmin) {
@@ -69,20 +85,16 @@ public class AppUserService {
         AppUser savedUser = appUserRepo.save(user);
 
         // 5. Création du lien associatif si ce n'est pas un Super Admin
-        if (!isSuperAdmin) {
-            Structure structure = structureRepo.findByCodeStructure(codeStructureCible.trim().toUpperCase())
-                    .stream().findFirst()
-                    .orElseThrow(() -> new RuntimeException("Structure introuvable avec le code: " + codeStructureCible));
-
+        if (!isSuperAdmin && structureCible != null) {
             UserStructure link = new UserStructure();
             link.setUser(savedUser);
-            link.setStructure(structure);
+            link.setStructure(structureCible);
             link.setRoleInStructure(roleInitial != null ? roleInitial : "COLLABORATEUR"); 
 
             userStructureRepo.save(link);
 
             // Notification WhatsApp
-            this.sendCredentialsViaWhatsApp(savedUser.getUserPhone(), structure.getCodeStructure(), clearPassword);
+            this.sendCredentialsViaWhatsApp(savedUser.getUserPhone(), structureCible.getCodeStructure(), clearPassword);
         }
 
         return savedUser;
@@ -101,11 +113,18 @@ public class AppUserService {
 
         if (existingLink.isPresent()) {
             UserStructure link = existingLink.get();
+            // Si la liaison était supprimée et qu'on la réactive, il faut ré-appliquer la vérification de quota
+            if (Boolean.TRUE.equals(link.getDeleted())) {
+                checkUserQuotaForStructure(structure);
+            }
             link.setDeleted(false);
             link.setRoleInStructure(role); 
             link.setUpdatedAt(LocalDateTime.now());
             userStructureRepo.save(link);
         } else {
+            // 🔹 Vérification du quota pour une nouvelle association
+            checkUserQuotaForStructure(structure);
+
             UserStructure newLink = new UserStructure();
             newLink.setUser(user);
             newLink.setStructure(structure);
@@ -113,6 +132,8 @@ public class AppUserService {
             userStructureRepo.save(newLink);
         }
     }
+
+  
 
     public List<AppUser> getActiveUsersByStructure(String codeStructure) {
         return userStructureRepo.findByStructure_CodeStructureAndDeletedFalse(codeStructure)
@@ -172,7 +193,7 @@ public List<AppUserDTO> getAllUsersByStructure(String structureId) {
     public void disableUser(String id) {
         AppUser user = appUserRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
-        user.setActive(false); // ✅ Remplacé user.setIsActive par user.setActive
+        user.setActive(false); 
         appUserRepo.save(user);
     }
 
@@ -229,5 +250,22 @@ public void updateLastSyncDate(String userId) {
     appUserRepo.save(user);
     log.info("🔄 Date de synchronisation mise à jour pour l'utilisateur : {}", userId);
 }
+
+private void checkUserQuotaForStructure(Structure structure) {
+    Integer maxAllowed = structure.getNombreUsers(); 
+
+    if (maxAllowed != null) {
+        long currentCount = userStructureRepo.countByStructure_CodeStructureAndDeletedFalse(structure.getCodeStructure());
+
+        if (currentCount >= maxAllowed) {
+            throw new QuotaExceededException(
+                String.format("Quota d'utilisateurs atteint pour la structure %s. Nombre actuel : %d, Limite autorisée : %d",
+                    structure.getCodeStructure(), currentCount, maxAllowed)
+            );
+        }
+    }
+}
+
+
 
 }

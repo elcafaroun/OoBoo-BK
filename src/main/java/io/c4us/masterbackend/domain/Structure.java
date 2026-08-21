@@ -63,9 +63,15 @@ public class Structure implements Serializable {
 
     @Column(name = "mini_dashboard")
     private Boolean miniDashboard;
+    
+    @Column(name = "dashboard_web")
+    private Boolean dashboardWeb;
+
+    @Column(name = "user_management")
+    private Boolean userManagement;
 
     @Column(name = "nombre_users")
-    private Boolean nombreUsers;
+    private Integer nombreUsers;
 
     @Column(name = "loyalty_access")
     private Boolean loyaltyAccess;

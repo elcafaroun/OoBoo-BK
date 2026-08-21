@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -39,13 +40,15 @@ public class StructureResponseDTO {
     private Boolean iaActive;
     private Boolean miniDashboard;
 
-
+    
+    private Boolean dashboardWeb;
+    private Boolean userManagement;
     // --- SNAPSHOT DES RÈGLES DU PLAN ---
     private Boolean smsAlerte;
     private Boolean stockAlerte;
     private Boolean emailAlerte;
     private Boolean dashboard;
-    private Boolean nombreUsers;
+    private Integer nombreUsers;
     private Boolean loyaltyAccess;
     private Integer gracePeriode;
     private Integer nombreJourSouscription;

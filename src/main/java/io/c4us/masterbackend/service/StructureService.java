@@ -43,7 +43,8 @@ public class StructureService {
     private final UserStructureRepo userStructureRepo;
 
     /**
-     * 🔹 Méthode privée réutilisable pour copier l'intégralité des attributs du Plan vers la Structure
+     * 🔹 Méthode privée réutilisable pour copier l'intégralité des attributs du
+     * Plan vers la Structure
      */
     private void copyPlanFeaturesToStructure(Structure struct, SubscriptionPlan plan) {
         struct.setPlanStructure(plan.getName());
@@ -56,8 +57,10 @@ public class StructureService {
         struct.setEmailAlerte(plan.getEmailAlerte());
         struct.setDashboard(plan.getDashboard());
         struct.setLoyaltyAccess(plan.getLoyaltyAccess());
-struct.setIaActive(plan.getIaActive());
-    struct.setMiniDashboard(plan.getMiniDashboard());
+        struct.setIaActive(plan.getIaActive());
+        struct.setMiniDashboard(plan.getMiniDashboard());
+        struct.setDashboardWeb(plan.getDashboardWeb());
+        struct.setUserManagement(plan.getUserManagement());
         // Copie des quotas et durées
         struct.setGracePeriode(plan.getGracePeriode());
         struct.setNombreJourSouscription(plan.getNombreJourSouscription());
@@ -303,12 +306,15 @@ struct.setIaActive(plan.getIaActive());
                 .cout(entity.getCout())
                 .priorite(entity.getPriorite())
                 // Snapshot des règles
-                .smsAlerte(entity.getSmsAlerte())
+
+                .cout(entity.getCout())
+                .userManagement(entity.getUserManagement())
+                .dashboardWeb(entity.getDashboardWeb())
                 .stockAlerte(entity.getStockAlerte())
                 .emailAlerte(entity.getEmailAlerte())
                 .dashboard(entity.getDashboard())
                 .iaActive(entity.getIaActive())
-            .miniDashboard(entity.getMiniDashboard())
+                .miniDashboard(entity.getMiniDashboard())
                 .nombreUsers(entity.getNombreUsers())
                 .loyaltyAccess(entity.getLoyaltyAccess())
                 .gracePeriode(entity.getGracePeriode())

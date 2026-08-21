@@ -63,9 +63,15 @@ public class SubscriptionPlan {
     @Column(name = "nombre_prod_par_business")
     private Integer nombreProdParBusiness;
 
-     @Column(name = "ia_active")
+    @Column(name = "ia_active")
     private Boolean iaActive;
 
     @Column(name = "mini_dashboard")
     private Boolean miniDashboard;
+
+    @Column(name = "dashboard_web")
+    private Boolean dashboardWeb;
+
+    @Column(name = "user_management")
+    private Boolean userManagement;
 }
