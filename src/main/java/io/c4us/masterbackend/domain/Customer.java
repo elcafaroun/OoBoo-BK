@@ -3,6 +3,7 @@ package io.c4us.masterbackend.domain;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -25,10 +26,16 @@ public class Customer implements Serializable {
     private String codePin;
     private String customerName;
     private String codeStructure;
-        private LocalDateTime createdDate = LocalDateTime.now();
-           @Version
-    private Long version; //
+    
+    @Column(columnDefinition = "TEXT")
+    private String segment;
 
-   // private boolean isActive= true;
+    private Integer nombreDePoints = 0; // Initialisé à 0 par défaut
 
+    private LocalDateTime createdDate = LocalDateTime.now();
+    
+    @Version
+    private Long version;
+
+   // private boolean isActive = true;
 }

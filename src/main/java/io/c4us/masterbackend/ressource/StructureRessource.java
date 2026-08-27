@@ -18,7 +18,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.c4us.masterbackend.DTOs.CategoryStatusUpdateDTO;
 import io.c4us.masterbackend.DTOs.StructureResponseDTO;
 import io.c4us.masterbackend.DTOs.StructureStatusUpdateDTO;
 import io.c4us.masterbackend.domain.Structure;

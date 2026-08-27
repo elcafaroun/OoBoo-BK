@@ -3,7 +3,6 @@ package io.c4us.masterbackend.DTOs;
 import lombok.*;
 import java.time.LocalDateTime;
 
-import jakarta.persistence.Column;
 
 
 @Getter

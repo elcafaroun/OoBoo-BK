@@ -38,67 +38,77 @@ public class AppUserService {
 /**
      * Création d'un utilisateur et affectation à sa première structure
      */
-    public AppUser createAppUser(AppUser user, String codeStructureCible, String roleInitial) {
-        // 1. Double sécurité d'unicité
-        if (!isEmailUnique(user.getUserEmail())) {
-            throw new RuntimeException("L'adresse email '" + user.getUserEmail() + "' est déjà utilisée.");
-        }
-        if (!isPhoneUnique(user.getUserPhone())) {
-            throw new RuntimeException("Le numéro de téléphone '" + user.getUserPhone() + "' est déjà utilisé.");
-        }
-
-        boolean isSuperAdmin = "Super admin".equalsIgnoreCase(user.getUserProfile());
-        String clearPassword = user.getUserPassword();
-
-        // Validation de la structure obligatoire pour les comptes enfants
-        if (!isSuperAdmin && (codeStructureCible == null || codeStructureCible.trim().isEmpty())) {
-            throw new RuntimeException("Impossible de créer un profil utilisateur sans l'associer à une structure valide.");
-        }
-
-        Structure structureCible = null;
-
-        // 🔹 VERIFICATION DU QUOTA AVANT TOUTE OPERATION HASH / SAVE
-        if (!isSuperAdmin) {
-            structureCible = structureRepo.findByCodeStructure(codeStructureCible.trim().toUpperCase())
-                    .stream().findFirst()
-                    .orElseThrow(() -> new RuntimeException("Structure introuvable avec le code: " + codeStructureCible));
-
-            // Vérification de la limite du quota d'utilisateurs
-            checkUserQuotaForStructure(structureCible);
-        }
-
-        // 2. Chiffrement et Token
-        user.setUserPassword(passwordEncoder.encode(user.getUserPassword()));
-        user.setConfirmationToken(generateAndSetToken(user));
-
-        // 3. Génération séquentielle du Code Utilisateur
-        if (isSuperAdmin) {
-            long globalAdminCount = appUserRepo.countByCodeUserStartingWith("ROOT_") + 1;
-            user.setCodeUser(String.format("ROOT_%04d", globalAdminCount));
-        } else {
-            String cleanCodeStruct = codeStructureCible.trim().toUpperCase();
-            long nextAgentSequence = userStructureRepo.countByStructure_CodeStructure(cleanCodeStruct) + 1;
-            user.setCodeUser(String.format("%s_%03d", cleanCodeStruct, nextAgentSequence));
-        }
-
-        // 4. Enregistrement initial de l'utilisateur
-        AppUser savedUser = appUserRepo.save(user);
-
-        // 5. Création du lien associatif si ce n'est pas un Super Admin
-        if (!isSuperAdmin && structureCible != null) {
-            UserStructure link = new UserStructure();
-            link.setUser(savedUser);
-            link.setStructure(structureCible);
-            link.setRoleInStructure(roleInitial != null ? roleInitial : "COLLABORATEUR"); 
-
-            userStructureRepo.save(link);
-
-            // Notification WhatsApp
-            this.sendCredentialsViaWhatsApp(savedUser.getUserPhone(), structureCible.getCodeStructure(), clearPassword);
-        }
-
-        return savedUser;
+public AppUser createAppUser(AppUser user, String codeStructureCible, String roleInitial) {
+    // 1. Nettoyage des chaînes vides (convertir "" en null pour éviter les violations de contrainte SQL unique)
+    if (user.getUserEmail() != null && user.getUserEmail().trim().isEmpty()) {
+        user.setUserEmail(null);
     }
+    if (user.getUserPhone() != null) {
+        user.setUserPhone(user.getUserPhone().trim());
+    }
+
+    // 2. Double sécurité d'unicité
+    if (user.getUserEmail() != null && !isEmailUnique(user.getUserEmail())) {
+        throw new RuntimeException("L'adresse email '" + user.getUserEmail() + "' est déjà utilisée.");
+    }
+    if (!isPhoneUnique(user.getUserPhone())) {
+        throw new RuntimeException("Le numéro de téléphone '" + user.getUserPhone() + "' est déjà utilisé.");
+    }
+
+    boolean isSuperAdmin = "Super admin".equalsIgnoreCase(user.getUserProfile());
+    String clearPassword = user.getUserPassword();
+
+    // Validation de la structure obligatoire pour les comptes enfants
+    if (!isSuperAdmin && (codeStructureCible == null || codeStructureCible.trim().isEmpty())) {
+        throw new RuntimeException("Impossible de créer un profil utilisateur sans l'associer à une structure valide.");
+    }
+
+    Structure structureCible = null;
+
+    // 🔹 VÉRIFICATION DE LA STRUCTURE ET DU QUOTA
+    if (!isSuperAdmin) {
+        String cleanCodeStruct = codeStructureCible.trim().toUpperCase();
+        
+        structureCible = structureRepo.findByCodeStructure(cleanCodeStruct)
+                .stream().findFirst()
+                .orElseThrow(() -> new RuntimeException("Structure introuvable avec le code: " + cleanCodeStruct));
+
+        // Vérification de la limite du quota d'utilisateurs
+        checkUserQuotaForStructure(structureCible);
+    }
+
+    // 3. Chiffrement et Token
+    user.setUserPassword(passwordEncoder.encode(user.getUserPassword()));
+    user.setConfirmationToken(generateAndSetToken(user));
+
+    // 4. Génération séquentielle du Code Utilisateur
+    if (isSuperAdmin) {
+        long globalAdminCount = appUserRepo.countByCodeUserStartingWith("ROOT_") + 1;
+        user.setCodeUser(String.format("ROOT_%04d", globalAdminCount));
+    } else {
+        String cleanCodeStruct = codeStructureCible.trim().toUpperCase();
+        long nextAgentSequence = userStructureRepo.countByStructure_CodeStructure(cleanCodeStruct) + 1;
+        user.setCodeUser(String.format("%s_%03d", cleanCodeStruct, nextAgentSequence));
+    }
+
+    // 5. Enregistrement initial de l'utilisateur
+    AppUser savedUser = appUserRepo.save(user);
+
+    // 6. Création du lien associatif si ce n'est pas un Super Admin
+    if (!isSuperAdmin && structureCible != null) {
+        UserStructure link = new UserStructure();
+        link.setUser(savedUser);
+        link.setStructure(structureCible);
+        link.setRoleInStructure(roleInitial != null ? roleInitial : "COLLABORATEUR"); 
+
+        userStructureRepo.save(link);
+
+        // Notification WhatsApp
+        this.sendCredentialsViaWhatsApp(savedUser.getUserPhone(), structureCible.getCodeStructure(), clearPassword);
+    }
+
+    return savedUser;
+}
 
     /**
      * Associer un utilisateur existant à une nouvelle structure supplémentaire (Multi-structure)
