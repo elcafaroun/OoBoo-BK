@@ -7,6 +7,7 @@ import lombok.Data;
 public class CommandDto {    
     private String id; // 👈 AJOUTÉ : L'UUID généré par Flutter en mode offline
     private String customerName;
+    private String customerNum;
     private String paymentMethod;
     private String customerId;
     private String codeStructure;

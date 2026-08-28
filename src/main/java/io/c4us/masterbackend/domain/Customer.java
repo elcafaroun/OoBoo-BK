@@ -27,10 +27,10 @@ public class Customer implements Serializable {
     private String customerName;
     private String codeStructure;
     
-    @Column(columnDefinition = "TEXT")
-    private String segment;
+@Column(columnDefinition = "VARCHAR(255) DEFAULT 'STANDARD'")
+private String segment = "STANDARD";
 
-    private Integer nombreDePoints = 0; // Initialisé à 0 par défaut
+    private Double nombreDePoints = 0.0; // Initialisé à 0 par défaut
 
     private LocalDateTime createdDate = LocalDateTime.now();
     

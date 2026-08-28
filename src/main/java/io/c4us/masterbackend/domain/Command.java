@@ -18,6 +18,7 @@ public class Command implements Serializable, Persistable<String> {
     private String id; // L'ID généré par Flutter (ex: CMD-123456)
 
     private String customerName;
+    private String customerNum;
     private String status = "PENDING";
     private Double totalAmount;
     private Double totalCredit = 0.0;

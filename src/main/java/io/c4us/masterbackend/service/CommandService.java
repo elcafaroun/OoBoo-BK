@@ -8,10 +8,13 @@ import io.c4us.masterbackend.DTOs.UserSalesDto;
 import io.c4us.masterbackend.config.EmailService;
 import io.c4us.masterbackend.domain.Command;
 import io.c4us.masterbackend.domain.CommandLine;
-
+import io.c4us.masterbackend.domain.Customer;
+import io.c4us.masterbackend.domain.SegmentRule;
 import io.c4us.masterbackend.exception.ResourceNotFoundException;
 import io.c4us.masterbackend.repo.CommandRepo;
+import io.c4us.masterbackend.repo.CustomerRepo;
 import io.c4us.masterbackend.repo.ProductRepo;
+import io.c4us.masterbackend.repo.SegmentRuleRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,6 +33,8 @@ public class CommandService {
 
     private final CommandRepo commandRepo;
     private final ProductRepo productRepo;
+    private final CustomerRepo customerRepo;
+    private final SegmentRuleRepo segmentRuleRepo;
     private final EmailService emailService;
 
     // --- CRÉATION & LOGIQUE MÉTIER ---
@@ -38,7 +43,6 @@ public class CommandService {
         log.info("Réception d'une commande avec l'ID: {}", commandDto.getId());
 
         // 1. VERIFICATION D'EXISTENCE (Idempotence)
-        // Si l'ID existe déjà, on retourne l'existant sans rien faire
         Optional<Command> existing = commandRepo.findById(commandDto.getId());
         if (existing.isPresent()) {
             log.warn("La commande {} existe déjà. Ignorer l'insertion.", commandDto.getId());
@@ -47,10 +51,11 @@ public class CommandService {
 
         // 2. MAPPING DTO -> ENTITY
         Command command = new Command();
-        command.setId(commandDto.getId()); // On utilise l'ID de Flutter
-        command.setVersion(0L); // Force le statut "isNew"
+        command.setId(commandDto.getId());
+        command.setVersion(0L);
 
         command.setCustomerName(commandDto.getCustomerName());
+        command.setCustomerNum(commandDto.getCustomerNum());
         command.setCodeStructure(commandDto.getCodeStructure());
         command.setPaymentMethod(commandDto.getPaymentMethod());
         command.setUserId(commandDto.getUserId());
@@ -62,16 +67,14 @@ public class CommandService {
         if (commandDto.getItems() != null) {
             for (var itemDto : commandDto.getItems()) {
                 CommandLine line = new CommandLine();
-                line.setProductId(itemDto.getProductId()); // Important pour le stock
+                line.setProductId(itemDto.getProductId());
                 line.setProductName(itemDto.getProductName());
                 line.setQuantity(itemDto.getQuantity());
                 line.setUnitPrice(itemDto.getUnitPrice());
                 line.setCodeStructure(commandDto.getCodeStructure());
 
-                // Lie la ligne à la commande
                 command.addLigneCommande(line);
 
-                // Mise à jour du stock local au Burkina
                 updateStockAndCheckAlert(
                         itemDto.getProductName(),
                         itemDto.getQuantity(),
@@ -82,7 +85,12 @@ public class CommandService {
         // 4. CONFIGURATION DES MONTANTS (Crédit vs Cash)
         configurerMontants(command, commandDto);
 
-        // 5. SAUVEGARDE
+        // 5. ATTRIBUTION DES POINTS CLIENT
+        if (commandDto.getCustomerNum() != null && !commandDto.getCustomerNum().trim().isEmpty()) {
+            updateCustomerPoints(commandDto.getCustomerNum(), commandDto.getCodeStructure(), command.getTotalAmount());
+        }
+
+        // 6. SAUVEGARDE
         try {
             Command saved = commandRepo.saveAndFlush(command);
             log.info("✅ Commande enregistrée avec succès: {}", saved.getId());
@@ -92,6 +100,51 @@ public class CommandService {
             throw e;
         }
     }
+
+    /**
+     * Calcule et met à jour les points fidélité du client
+     */
+ private void updateCustomerPoints(String phone, String codeStructure, Double amountPaid) {
+    if (amountPaid == null || amountPaid <= 0) {
+        return;
+    }
+
+    Optional<Customer> customerOpt = customerRepo.findByNumCustAndCodeStructure(phone, codeStructure);
+    if (customerOpt.isEmpty()) {
+        log.warn("⚠️ Client introuvable avec le numéro {} pour la structure {}", phone, codeStructure);
+        return;
+    }
+
+    Customer customer = customerOpt.get();
+    String segmentName = customer.getSegment() != null ? customer.getSegment() : "STANDARD";
+
+    Optional<SegmentRule> ruleOpt = segmentRuleRepo.findBySegmentName(segmentName);
+
+    if (ruleOpt.isPresent()) {
+        SegmentRule rule = ruleOpt.get();
+
+        if (amountPaid >= rule.getMinAmountOrder()) {
+            double rate = (rule.getConversionRate() != null && rule.getConversionRate() > 0) ? rule.getConversionRate() : 1000.0;
+            double pointsEarnedPerUnit = rule.getPointsEarned() != null ? rule.getPointsEarned() : 1.0;
+
+            // 💥 CALCUL EN DOUBLE (autorise les décimales comme 1.5, 2.5)
+            double earnedPoints = (amountPaid / rate) * pointsEarnedPerUnit;
+
+            if (earnedPoints > 0) {
+                double currentPoints = customer.getNombreDePoints() != null ? customer.getNombreDePoints() : 0.0;
+                
+                // Mettre à jour avec le total en Double
+                customer.setNombreDePoints(currentPoints + earnedPoints);
+                customerRepo.save(customer);
+
+                log.info("⭐ {} points attribués au client {} (Segment: {}). Nouveau solde: {}",
+                        earnedPoints, customer.getCustomerName(), segmentName, customer.getNombreDePoints());
+            }
+        }
+    } else {
+        log.warn("⚠️ Aucune règle de fidélité trouvée pour le segment {}", segmentName);
+    }
+}
 
     private void configurerMontants(Command command, CommandDto dto) {
         String method = dto.getPaymentMethod() != null ? dto.getPaymentMethod().toLowerCase() : "";
@@ -106,7 +159,8 @@ public class CommandService {
             command.setStatus("COMPLETED");
         }
     }
-    // --- MÉTHODES DE RECHERCHE (Remises en place) ---
+
+    // --- AUTRES MÉTHODES (Inchangées) ---
 
     public List<Command> findAllCommand() {
         return commandRepo.findAll();
@@ -120,8 +174,6 @@ public class CommandService {
     public List<Command> findCommandsByStructure(String codeStructure) {
         return commandRepo.findByCodeStructure(codeStructure);
     }
-
-    // --- ACTIONS SUR LES COMMANDES ---
 
     @Transactional
     public Command updateStatus(String id, String newStatus) {
@@ -176,10 +228,14 @@ public class CommandService {
         if (command.getTotalCredit() <= 0) {
             command.setStatus("COMPLETED");
         }
+
+        // Attribution des points sur le règlement de crédit effectué
+        if (command.getCustomerNum() != null) {
+            updateCustomerPoints(command.getCustomerNum(), command.getCodeStructure(), amountPaid);
+        }
+
         return commandRepo.save(command);
     }
-
-    // --- STATISTIQUES & SYNCHRO ---
 
     public List<Command> getCommandsUpdates(String codeStructure, LocalDateTime lastSync) {
         if (lastSync == null)
@@ -211,7 +267,6 @@ public class CommandService {
         return stats;
     }
 
-    // ... dans votre Service
     public List<UserSalesDto> getSalesByUserForStructure(String codeStructure) {
         return commandRepo.getSalesGroupedByUser(codeStructure);
     }
@@ -232,17 +287,13 @@ public class CommandService {
     public Map<String, Double> getDailySalesForMonth(String codeStructure, String yearMonth) {
         Map<String, Double> salesMap = new HashMap<>();
 
-        // Initialiser la map avec des valeurs à 0.0 pour un affichage propre
-        // (facultatif)
         for (int i = 1; i <= 31; i++) {
             String day = String.format("%02d", i);
             salesMap.put(day, 0.0);
         }
 
-        // Récupérer les données de la base
         List<Object[]> results = commandRepo.findDailySalesForMonth(codeStructure, yearMonth);
 
-        // Remplir la map avec les vrais chiffres
         for (Object[] row : results) {
             String day = (String) row[0];
             Double total = ((Number) row[1]).doubleValue();

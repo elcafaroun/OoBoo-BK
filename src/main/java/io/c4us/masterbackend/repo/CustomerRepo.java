@@ -12,5 +12,6 @@ public interface CustomerRepo extends JpaRepository<Customer, String>{
     @SuppressWarnings("null")
     Optional<Customer> findById(String id);
     Optional<Customer> findByNumCust(String numCust);
-   List<Customer> findByCodeStructure(String codeStructure); // ✅ À ajouter si ce n'est pas déjà fait
+   List<Customer> findByCodeStructure(String codeStructure); 
+   Optional<Customer> findByNumCustAndCodeStructure(String numCust, String codeStructure);// ✅ À ajouter si ce n'est pas déjà fait
 }
